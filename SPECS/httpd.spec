@@ -2,7 +2,8 @@
 %define docroot /var/www
 %define suexec_caller apache
 %define mmn 20120211
-%define mmnisa %{mmn}-%{__isa_name}-%{__isa_bits}
+%define oldmmnisa %{mmn}-%{__isa_name}-%{__isa_bits}
+%define mmnisa %{mmn}%{__isa_name}%{__isa_bits}
 %define vstring Red Hat
 
 # Drop automatic provides for module DSOs
@@ -14,7 +15,7 @@
 Summary: Apache HTTP Server
 Name: httpd
 Version: 2.4.6
-Release: 7%{?dist}
+Release: 17%{?dist}
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
 Source1: index.html
@@ -63,11 +64,18 @@ Patch29: httpd-2.4.3-mod_systemd.patch
 Patch30: httpd-2.4.4-cachehardmax.patch
 Patch31: httpd-2.4.6-sslmultiproxy.patch
 Patch32: httpd-2.4.6-r1537535.patch
+Patch33: httpd-2.4.6-r1542327.patch
 # Bug fixes
 Patch51: httpd-2.4.3-sslsninotreq.patch
 Patch55: httpd-2.4.4-malformed-host.patch
 Patch56: httpd-2.4.4-mod_unique_id.patch
 Patch57: httpd-2.4.6-ldaprefer.patch
+Patch58: httpd-2.4.6-r1507681+.patch
+Patch59: httpd-2.4.6-r1556473.patch
+Patch60: httpd-2.4.6-r1553540.patch
+# Security fixes
+Patch200: httpd-2.4.6-CVE-2013-6438.patch
+Patch201: httpd-2.4.6-CVE-2014-0098.patch
 License: ASL 2.0
 Group: System Environment/Daemons
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -79,7 +87,7 @@ Requires: /etc/mime.types, system-logos >= 7.92.1-1
 Obsoletes: httpd-suexec
 Provides: webserver
 Provides: mod_dav = %{version}-%{release}, httpd-suexec = %{version}-%{release}
-Provides: httpd-mmn = %{mmn}, httpd-mmn = %{mmnisa}
+Provides: httpd-mmn = %{mmn}, httpd-mmn = %{mmnisa}, httpd-mmn = %{oldmmnisa}
 Requires: httpd-tools = %{version}-%{release}
 Requires(pre): /usr/sbin/useradd
 Requires(preun): systemd-units
@@ -191,11 +199,19 @@ interface for storing and accessing per-user session data.
 %patch30 -p1 -b .cachehardmax
 %patch31 -p1 -b .sslmultiproxy
 %patch32 -p1 -b .r1537535
+%patch33 -p1 -b .r1542327
+rm modules/ssl/ssl_engine_dh.c
 
 %patch51 -p1 -b .sninotreq
 %patch55 -p1 -b .malformedhost
 %patch56 -p1 -b .uniqueid
 %patch57 -p1 -b .ldaprefer
+%patch58 -p1 -b .r1507681+
+%patch59 -p1 -b .r1556473
+%patch60 -p1 -b .r1553540
+
+%patch200 -p1 -b .cve6438
+%patch201 -p1 -b .cve0098
 
 # Patch in the vendor string and the release string
 sed -i '/^#define PLATFORM/s/Unix/%{vstring}/' os/unix/os.h
@@ -227,6 +243,10 @@ autoheader && autoconf || exit 1
 
 export CFLAGS=$RPM_OPT_FLAGS
 export LDFLAGS="-Wl,-z,relro,-z,now"
+
+%ifarch ppc64
+CFLAGS="$CFLAGS -O3"
+%endif
 
 # Hard-code path to links to avoid unnecessary builddep
 export LYNX_PATH=/usr/bin/links
@@ -465,7 +485,7 @@ if [ -f %{sslkey} -o -f %{sslcert} ]; then
    exit 0
 fi
 
-%{_bindir}/openssl genrsa -rand /proc/apm:/proc/cpuinfo:/proc/dma:/proc/filesystems:/proc/interrupts:/proc/ioports:/proc/pci:/proc/rtc:/proc/uptime 1024 > %{sslkey} 2> /dev/null
+%{_bindir}/openssl genrsa -rand /proc/apm:/proc/cpuinfo:/proc/dma:/proc/filesystems:/proc/interrupts:/proc/ioports:/proc/pci:/proc/rtc:/proc/uptime 2048 > %{sslkey} 2> /dev/null
 
 FQDN=`hostname`
 if [ "x${FQDN}" = "x" ]; then
@@ -473,7 +493,7 @@ if [ "x${FQDN}" = "x" ]; then
 fi
 
 cat << EOF | %{_bindir}/openssl req -new -key %{sslkey} \
-         -x509 -days 365 -set_serial $RANDOM -extensions v3_req \
+         -x509 -sha256 -days 365 -set_serial $RANDOM -extensions v3_req \
          -out %{sslcert} 2>/dev/null
 --
 SomeState
@@ -620,6 +640,38 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/rpm/macros.httpd
 
 %changelog
+* Thu Mar 20 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-17
+- mod_dav: add security fix for CVE-2013-6438 (#1077907)
+- mod_log_config: add security fix for CVE-2014-0098 (#1077907)
+
+* Wed Mar  5 2014 Joe Orton <jorton@redhat.com> - 2.4.6-16
+- mod_ssl: improve DH temp key handling (#1057687)
+
+* Wed Mar  5 2014 Joe Orton <jorton@redhat.com> - 2.4.6-15
+- mod_ssl: use 2048-bit RSA key with SHA-256 signature in dummy certificate (#1071276)
+
+* Fri Jan 24 2014 Daniel Mach <dmach@redhat.com> - 2.4.6-14
+- Mass rebuild 2014-01-24
+
+* Mon Jan 13 2014 Joe Orton <jorton@redhat.com> - 2.4.6-13
+- mod_ssl: sanity-check use of "SSLCompression" (#1036666)
+- mod_proxy_http: fix brigade memory usage (#1040447)
+
+* Fri Jan 10 2014 Joe Orton <jorton@redhat.com> - 2.4.6-12
+- rebuild
+
+* Thu Jan  9 2014 Joe Orton <jorton@redhat.com> - 2.4.6-11
+- build with -O3 on ppc64 (#1051066)
+
+* Tue Jan  7 2014 Joe Orton <jorton@redhat.com> - 2.4.6-10
+- mod_dav: fix locktoken handling (#1004046)
+
+* Fri Dec 27 2013 Daniel Mach <dmach@redhat.com> - 2.4.6-9
+- Mass rebuild 2013-12-27
+
+* Fri Dec 20 2013 Joe Orton <jorton@redhat.com> - 2.4.6-8
+- use unambiguous httpd-mmn (#1029360)
+
 * Fri Nov   1 2013 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-7
 - mod_ssl: allow SSLEngine to override Listen-based default (#1023168)
 
