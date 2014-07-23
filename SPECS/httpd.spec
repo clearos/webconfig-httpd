@@ -4,7 +4,7 @@
 %define mmn 20120211
 %define oldmmnisa %{mmn}-%{__isa_name}-%{__isa_bits}
 %define mmnisa %{mmn}%{__isa_name}%{__isa_bits}
-%define vstring CentOS
+%define vstring Red Hat
 
 # Drop automatic provides for module DSOs
 %{?filter_setup:
@@ -15,10 +15,10 @@
 Summary: Apache HTTP Server
 Name: httpd
 Version: 2.4.6
-Release: 17%{?dist}.1
+Release: 18%{?dist}
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
-Source1: centos-noindex.tar.gz
+Source1: index.html
 Source2: httpd.logrotate
 Source3: httpd.sysconf
 Source4: httpd-ssl-pass-dialog
@@ -76,6 +76,11 @@ Patch60: httpd-2.4.6-r1553540.patch
 # Security fixes
 Patch200: httpd-2.4.6-CVE-2013-6438.patch
 Patch201: httpd-2.4.6-CVE-2014-0098.patch
+Patch202: httpd-2.4.6-CVE-2014-0231.patch
+Patch203: httpd-2.4.6-CVE-2014-0117.patch
+Patch204: httpd-2.4.6-CVE-2014-0118.patch
+Patch205: httpd-2.4.6-CVE-2014-0226.patch
+Patch206: httpd-2.4.6-CVE-2013-4352.patch
 License: ASL 2.0
 Group: System Environment/Daemons
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -212,6 +217,11 @@ rm modules/ssl/ssl_engine_dh.c
 
 %patch200 -p1 -b .cve6438
 %patch201 -p1 -b .cve0098
+%patch202 -p1 -b .cve0231
+%patch203 -p1 -b .cve0117
+%patch204 -p1 -b .cve0118
+%patch205 -p1 -b .cve0226
+%patch206 -p1 -b .cve4352
 
 # Patch in the vendor string and the release string
 sed -i '/^#define PLATFORM/s/Unix/%{vstring}/' os/unix/os.h
@@ -365,10 +375,8 @@ EOF
 
 # Handle contentdir
 mkdir $RPM_BUILD_ROOT%{contentdir}/noindex
-tar xzf $RPM_SOURCE_DIR/centos-noindex.tar.gz \
-        -C $RPM_BUILD_ROOT%{contentdir}/noindex/ \
-        --strip-components=1
-
+install -m 644 -p $RPM_SOURCE_DIR/index.html \
+        $RPM_BUILD_ROOT%{contentdir}/noindex/index.html
 rm -rf %{contentdir}/htdocs
 
 # remove manual sources
@@ -391,7 +399,7 @@ rm -v $RPM_BUILD_ROOT%{docroot}/html/*.html \
       $RPM_BUILD_ROOT%{docroot}/cgi-bin/*
 
 # Symlink for the powered-by-$DISTRO image:
-ln -s ../noindex/images/poweredby.png \
+ln -s ../../pixmaps/poweredby.png \
         $RPM_BUILD_ROOT%{contentdir}/icons/poweredby.png
 
 # symlinks for /etc/httpd
@@ -576,7 +584,7 @@ rm -rf $RPM_BUILD_ROOT
 %{contentdir}/error/README
 %{contentdir}/error/*.var
 %{contentdir}/error/include/*.html
-%{contentdir}/noindex/*
+%{contentdir}/noindex/index.html
 
 %dir %{docroot}
 %dir %{docroot}/cgi-bin
@@ -642,10 +650,12 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/rpm/macros.httpd
 
 %changelog
-* Tue Jun 17 2014 Jim Perrin <jperrin@centos.org> - 2.4.6-17.el7.centos.1
-- Remove index.html, add centos-noindex.tar.gz
-- update welcome.conf with proper aliases
-- change symlink for poweredby.png
+* Thu Jul 17 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-18
+- mod_cgid: add security fix for CVE-2014-0231 (#1120607)
+- mod_proxy: add security fix for CVE-2014-0117 (#1120607)
+- mod_deflate: add security fix for CVE-2014-0118 (#1120607)
+- mod_status: add security fix for CVE-2014-0226 (#1120607)
+- mod_cache: add secutiry fix for CVE-2013-4352 (#1120607)
 
 * Thu Mar 20 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-17
 - mod_dav: add security fix for CVE-2013-6438 (#1077907)
