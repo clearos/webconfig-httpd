@@ -4,7 +4,7 @@
 %define mmn 20120211
 %define oldmmnisa %{mmn}-%{__isa_name}-%{__isa_bits}
 %define mmnisa %{mmn}%{__isa_name}%{__isa_bits}
-%define vstring CentOS
+%define vstring Red Hat
 
 # Drop automatic provides for module DSOs
 %{?filter_setup:
@@ -15,10 +15,10 @@
 Summary: Apache HTTP Server
 Name: httpd
 Version: 2.4.6
-Release: 18%{?dist}
+Release: 19%{?dist}
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
-Source1: centos-noindex.tar.gz 
+Source1: index.html
 Source2: httpd.logrotate
 Source3: httpd.sysconf
 Source4: httpd-ssl-pass-dialog
@@ -65,6 +65,8 @@ Patch30: httpd-2.4.4-cachehardmax.patch
 Patch31: httpd-2.4.6-sslmultiproxy.patch
 Patch32: httpd-2.4.6-r1537535.patch
 Patch33: httpd-2.4.6-r1542327.patch
+Patch34: httpd-2.4.6-r1573626.patch
+Patch35: httpd-2.4.6-uds.patch
 # Bug fixes
 Patch51: httpd-2.4.3-sslsninotreq.patch
 Patch55: httpd-2.4.4-malformed-host.patch
@@ -73,6 +75,7 @@ Patch57: httpd-2.4.6-ldaprefer.patch
 Patch58: httpd-2.4.6-r1507681+.patch
 Patch59: httpd-2.4.6-r1556473.patch
 Patch60: httpd-2.4.6-r1553540.patch
+Patch61: httpd-2.4.6-r1526189.patch
 # Security fixes
 Patch200: httpd-2.4.6-CVE-2013-6438.patch
 Patch201: httpd-2.4.6-CVE-2014-0098.patch
@@ -206,6 +209,8 @@ interface for storing and accessing per-user session data.
 %patch32 -p1 -b .r1537535
 %patch33 -p1 -b .r1542327
 rm modules/ssl/ssl_engine_dh.c
+%patch34 -p1 -b .r1573626
+%patch35 -p1 -b .uds
 
 %patch51 -p1 -b .sninotreq
 %patch55 -p1 -b .malformedhost
@@ -214,6 +219,7 @@ rm modules/ssl/ssl_engine_dh.c
 %patch58 -p1 -b .r1507681+
 %patch59 -p1 -b .r1556473
 %patch60 -p1 -b .r1553540
+%patch61 -p1 -b .r1526189
 
 %patch200 -p1 -b .cve6438
 %patch201 -p1 -b .cve0098
@@ -375,10 +381,8 @@ EOF
 
 # Handle contentdir
 mkdir $RPM_BUILD_ROOT%{contentdir}/noindex
-tar xzf $RPM_SOURCE_DIR/centos-noindex.tar.gz \
-        -C $RPM_BUILD_ROOT%{contentdir}/noindex/ \
-        --strip-components=1
-
+install -m 644 -p $RPM_SOURCE_DIR/index.html \
+        $RPM_BUILD_ROOT%{contentdir}/noindex/index.html
 rm -rf %{contentdir}/htdocs
 
 # remove manual sources
@@ -401,7 +405,7 @@ rm -v $RPM_BUILD_ROOT%{docroot}/html/*.html \
       $RPM_BUILD_ROOT%{docroot}/cgi-bin/*
 
 # Symlink for the powered-by-$DISTRO image:
-ln -s ../noindex/images/poweredby.png \
+ln -s ../../pixmaps/poweredby.png \
         $RPM_BUILD_ROOT%{contentdir}/icons/poweredby.png
 
 # symlinks for /etc/httpd
@@ -586,7 +590,7 @@ rm -rf $RPM_BUILD_ROOT
 %{contentdir}/error/README
 %{contentdir}/error/*.var
 %{contentdir}/error/include/*.html
-%{contentdir}/noindex/*
+%{contentdir}/noindex/index.html
 
 %dir %{docroot}
 %dir %{docroot}/cgi-bin
@@ -652,8 +656,10 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/rpm/macros.httpd
 
 %changelog
-* Wed Jul 23 2014 Johnny Hughes <johnny@centos.org> - 2.4.6-18.el7.centos
-- Roll in CentOS Branding
+* Thu Dec 04 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-19
+- mod_proxy_fcgi: determine if FCGI_CONN_CLOSE should be enabled
+  instead of hardcoding it (#1170217)
+- mod_proxy: support Unix Domain Sockets (#1170286)
 
 * Thu Jul 17 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-18
 - mod_cgid: add security fix for CVE-2014-0231 (#1120607)
