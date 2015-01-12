@@ -4,7 +4,7 @@
 %define mmn 20120211
 %define oldmmnisa %{mmn}-%{__isa_name}-%{__isa_bits}
 %define mmnisa %{mmn}%{__isa_name}%{__isa_bits}
-%define vstring Red Hat
+%define vstring CentOS
 
 # Drop automatic provides for module DSOs
 %{?filter_setup:
@@ -18,7 +18,7 @@ Version: 2.4.6
 Release: 19%{?dist}
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
-Source1: index.html
+Source1: centos-noindex.tar.gz
 Source2: httpd.logrotate
 Source3: httpd.sysconf
 Source4: httpd-ssl-pass-dialog
@@ -381,8 +381,10 @@ EOF
 
 # Handle contentdir
 mkdir $RPM_BUILD_ROOT%{contentdir}/noindex
-install -m 644 -p $RPM_SOURCE_DIR/index.html \
-        $RPM_BUILD_ROOT%{contentdir}/noindex/index.html
+tar xzf $RPM_SOURCE_DIR/centos-noindex.tar.gz \
+        -C $RPM_BUILD_ROOT%{contentdir}/noindex/ \
+        --strip-components=1
+
 rm -rf %{contentdir}/htdocs
 
 # remove manual sources
@@ -405,7 +407,7 @@ rm -v $RPM_BUILD_ROOT%{docroot}/html/*.html \
       $RPM_BUILD_ROOT%{docroot}/cgi-bin/*
 
 # Symlink for the powered-by-$DISTRO image:
-ln -s ../../pixmaps/poweredby.png \
+ln -s ../noindex/images/poweredby.png \
         $RPM_BUILD_ROOT%{contentdir}/icons/poweredby.png
 
 # symlinks for /etc/httpd
@@ -590,7 +592,7 @@ rm -rf $RPM_BUILD_ROOT
 %{contentdir}/error/README
 %{contentdir}/error/*.var
 %{contentdir}/error/include/*.html
-%{contentdir}/noindex/index.html
+%{contentdir}/noindex/*
 
 %dir %{docroot}
 %dir %{docroot}/cgi-bin
@@ -656,6 +658,12 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/rpm/macros.httpd
 
 %changelog
+* Mon Jan 12 2015 CentOS Sources <bugs@centos.org> - 2.4.6-19.el7.centos
+- Remove index.html, add centos-noindex.tar.gz
+- change vstring
+- change symlink for poweredby.png
+- update welcome.conf with proper aliases
+
 * Thu Dec 04 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-19
 - mod_proxy_fcgi: determine if FCGI_CONN_CLOSE should be enabled
   instead of hardcoding it (#1170217)
