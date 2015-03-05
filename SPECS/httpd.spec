@@ -4,7 +4,7 @@
 %define mmn 20120211
 %define oldmmnisa %{mmn}-%{__isa_name}-%{__isa_bits}
 %define mmnisa %{mmn}%{__isa_name}%{__isa_bits}
-%define vstring CentOS
+%define vstring %(source /etc/os-release; echo ${REDHAT_SUPPORT_PRODUCT})
 
 # Drop automatic provides for module DSOs
 %{?filter_setup:
@@ -15,10 +15,10 @@
 Summary: Apache HTTP Server
 Name: httpd
 Version: 2.4.6
-Release: 19%{?dist}
+Release: 31%{?dist}
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
-Source1: centos-noindex.tar.gz
+Source1: index.html
 Source2: httpd.logrotate
 Source3: httpd.sysconf
 Source4: httpd-ssl-pass-dialog
@@ -65,8 +65,10 @@ Patch30: httpd-2.4.4-cachehardmax.patch
 Patch31: httpd-2.4.6-sslmultiproxy.patch
 Patch32: httpd-2.4.6-r1537535.patch
 Patch33: httpd-2.4.6-r1542327.patch
-Patch34: httpd-2.4.6-r1573626.patch
-Patch35: httpd-2.4.6-uds.patch
+Patch34: httpd-2.4.6-ssl-large-keys.patch
+Patch35: httpd-2.4.6-pre_htaccess.patch
+Patch36: httpd-2.4.6-r1573626.patch
+Patch37: httpd-2.4.6-uds.patch
 # Bug fixes
 Patch51: httpd-2.4.3-sslsninotreq.patch
 Patch55: httpd-2.4.4-malformed-host.patch
@@ -75,7 +77,13 @@ Patch57: httpd-2.4.6-ldaprefer.patch
 Patch58: httpd-2.4.6-r1507681+.patch
 Patch59: httpd-2.4.6-r1556473.patch
 Patch60: httpd-2.4.6-r1553540.patch
-Patch61: httpd-2.4.6-r1526189.patch
+Patch61: httpd-2.4.6-rewrite-clientaddr.patch
+Patch62: httpd-2.4.6-ab-overflow.patch
+Patch63: httpd-2.4.6-sigint.patch
+Patch64: httpd-2.4.6-ssl-ecdh-auto.patch
+Patch65: httpd-2.4.6-r1556818.patch
+Patch66: httpd-2.4.6-r1618851.patch
+Patch67: httpd-2.4.6-r1526189.patch
 # Security fixes
 Patch200: httpd-2.4.6-CVE-2013-6438.patch
 Patch201: httpd-2.4.6-CVE-2014-0098.patch
@@ -84,6 +92,8 @@ Patch203: httpd-2.4.6-CVE-2014-0117.patch
 Patch204: httpd-2.4.6-CVE-2014-0118.patch
 Patch205: httpd-2.4.6-CVE-2014-0226.patch
 Patch206: httpd-2.4.6-CVE-2013-4352.patch
+Patch207: httpd-2.4.6-CVE-2013-5704.patch
+Patch208: httpd-2.4.6-CVE-2014-3581.patch
 License: ASL 2.0
 Group: System Environment/Daemons
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -147,6 +157,7 @@ Group: System Environment/Daemons
 Summary: SSL/TLS module for the Apache HTTP Server
 Epoch: 1
 BuildRequires: openssl-devel
+Requires: openssl-libs >= 1:1.0.1e-37
 Requires(post): openssl, /bin/cat
 Requires(pre): httpd
 Requires: httpd = 0:%{version}-%{release}, httpd-mmn = %{mmnisa}
@@ -209,8 +220,10 @@ interface for storing and accessing per-user session data.
 %patch32 -p1 -b .r1537535
 %patch33 -p1 -b .r1542327
 rm modules/ssl/ssl_engine_dh.c
-%patch34 -p1 -b .r1573626
-%patch35 -p1 -b .uds
+%patch34 -p1 -b .ssllargekeys
+%patch35 -p1 -b .prehtaccess
+%patch36 -p1 -b .r1573626
+%patch37 -p1 -b .uds
 
 %patch51 -p1 -b .sninotreq
 %patch55 -p1 -b .malformedhost
@@ -219,7 +232,13 @@ rm modules/ssl/ssl_engine_dh.c
 %patch58 -p1 -b .r1507681+
 %patch59 -p1 -b .r1556473
 %patch60 -p1 -b .r1553540
-%patch61 -p1 -b .r1526189
+%patch61 -p1 -b .clientaddr
+%patch62 -p1 -b .aboverflow
+%patch63 -p1 -b .sigint
+%patch64 -p1 -b .sslecdhauto
+%patch65 -p1 -b .r1556818
+%patch66 -p1 -b .r1618851
+%patch67 -p1 -b .r1526189
 
 %patch200 -p1 -b .cve6438
 %patch201 -p1 -b .cve0098
@@ -228,6 +247,8 @@ rm modules/ssl/ssl_engine_dh.c
 %patch204 -p1 -b .cve0118
 %patch205 -p1 -b .cve0226
 %patch206 -p1 -b .cve4352
+%patch207 -p1 -b .cve5704
+%patch208 -p1 -b .cve3581
 
 # Patch in the vendor string and the release string
 sed -i '/^#define PLATFORM/s/Unix/%{vstring}/' os/unix/os.h
@@ -260,15 +281,15 @@ autoheader && autoconf || exit 1
 export CFLAGS=$RPM_OPT_FLAGS
 export LDFLAGS="-Wl,-z,relro,-z,now"
 
-%ifarch ppc64
-CFLAGS="$CFLAGS -O3"
+%ifarch ppc64 ppc64le
+%global _performance_build 1
 %endif
 
 # Hard-code path to links to avoid unnecessary builddep
 export LYNX_PATH=/usr/bin/links
 
 # Build the daemon
-./configure \
+%configure \
  	--prefix=%{_sysconfdir}/httpd \
  	--exec-prefix=%{_prefix} \
  	--bindir=%{_bindir} \
@@ -381,10 +402,8 @@ EOF
 
 # Handle contentdir
 mkdir $RPM_BUILD_ROOT%{contentdir}/noindex
-tar xzf $RPM_SOURCE_DIR/centos-noindex.tar.gz \
-        -C $RPM_BUILD_ROOT%{contentdir}/noindex/ \
-        --strip-components=1
-
+install -m 644 -p $RPM_SOURCE_DIR/index.html \
+        $RPM_BUILD_ROOT%{contentdir}/noindex/index.html
 rm -rf %{contentdir}/htdocs
 
 # remove manual sources
@@ -407,7 +426,7 @@ rm -v $RPM_BUILD_ROOT%{docroot}/html/*.html \
       $RPM_BUILD_ROOT%{docroot}/cgi-bin/*
 
 # Symlink for the powered-by-$DISTRO image:
-ln -s ../noindex/images/poweredby.png \
+ln -s ../../pixmaps/poweredby.png \
         $RPM_BUILD_ROOT%{contentdir}/icons/poweredby.png
 
 # symlinks for /etc/httpd
@@ -592,7 +611,7 @@ rm -rf $RPM_BUILD_ROOT
 %{contentdir}/error/README
 %{contentdir}/error/*.var
 %{contentdir}/error/include/*.html
-%{contentdir}/noindex/*
+%{contentdir}/noindex/index.html
 
 %dir %{docroot}
 %dir %{docroot}/cgi-bin
@@ -658,23 +677,56 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/rpm/macros.httpd
 
 %changelog
-* Mon Jan 12 2015 CentOS Sources <bugs@centos.org> - 2.4.6-19.el7.centos
-- Remove index.html, add centos-noindex.tar.gz
-- change vstring
-- change symlink for poweredby.png
-- update welcome.conf with proper aliases
-
-* Thu Dec 04 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-19
+* Tue Dec 02 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-31
 - mod_proxy_fcgi: determine if FCGI_CONN_CLOSE should be enabled
-  instead of hardcoding it (#1170217)
-- mod_proxy: support Unix Domain Sockets (#1170286)
+  instead of hardcoding it (#1168050)
+- mod_proxy: support Unix Domain Sockets (#1168081)
+
+* Tue Nov 25 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-30
+- core: fix bypassing of mod_headers rules via chunked requests (CVE-2013-5704)
+- mod_cache: fix NULL pointer dereference on empty Content-Type (CVE-2014-3581)
+
+* Tue Nov 04 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-29
+- rebuild against proper version of OpenSSL (#1080125)
+
+* Wed Oct 22 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-28
+- set vstring based on /etc/os-release (#1114123)
+
+* Mon Oct 06 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-27
+- fix the dependency on openssl-libs to match the fix for #1080125
+
+* Mon Sep 22 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-26
+- allow <Auth*ProviderAlias>'es to be seen under virtual hosts (#1131847)
+
+* Fri Sep 19 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-25
+- do not use hardcoded curve for ECDHE suites (#1080125)
+
+* Wed Sep 03 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-24
+- allow reverse-proxy to be set via SetHandler (#1136290)
+
+* Thu Aug 21 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-23
+- fix possible crash in SIGINT handling (#1131006)
+
+* Mon Aug 18 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-22
+- ab: fix integer overflow when printing stats with lot of requests (#1092420)
+
+* Mon Aug 11 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-21
+- add pre_htaccess so mpm-itk can be build as separate module (#1059143)
+
+* Tue Aug 05 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-20
+- mod_ssl: prefer larger keys and support up to 8192-bit keys (#1073078)
+
+* Mon Aug 04 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-19
+- fix build on ppc64le by using configure macro (#1125545)
+- compile httpd with -O3 on ppc64le (#1123490)
+- mod_rewrite: expose CONN_REMOTE_ADDR (#1060536)
 
 * Thu Jul 17 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-18
-- mod_cgid: add security fix for CVE-2014-0231 (#1120607)
-- mod_proxy: add security fix for CVE-2014-0117 (#1120607)
-- mod_deflate: add security fix for CVE-2014-0118 (#1120607)
-- mod_status: add security fix for CVE-2014-0226 (#1120607)
-- mod_cache: add secutiry fix for CVE-2013-4352 (#1120607)
+- mod_cgid: add security fix for CVE-2014-0231 (#1120608)
+- mod_proxy: add security fix for CVE-2014-0117 (#1120608)
+- mod_deflate: add security fix for CVE-2014-0118 (#1120608)
+- mod_status: add security fix for CVE-2014-0226 (#1120608)
+- mod_cache: add secutiry fix for CVE-2013-4352 (#1120608)
 
 * Thu Mar 20 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-17
 - mod_dav: add security fix for CVE-2013-6438 (#1077907)
