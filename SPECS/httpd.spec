@@ -4,7 +4,7 @@
 %define mmn 20120211
 %define oldmmnisa %{mmn}-%{__isa_name}-%{__isa_bits}
 %define mmnisa %{mmn}%{__isa_name}%{__isa_bits}
-%define vstring %(source /etc/os-release; echo ${REDHAT_SUPPORT_PRODUCT})
+%define vstring CentOS 
 
 # Drop automatic provides for module DSOs
 %{?filter_setup:
