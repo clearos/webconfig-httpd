@@ -1,10 +1,11 @@
-%define contentdir %{_datadir}/httpd
-%define docroot /var/www
-%define suexec_caller apache
+%global _webconfigdir /usr/clearos/sandbox
+%define contentdir %{_webconfigdir}%{_datadir}/httpd
+%define docroot /usr/clearos/sandbox/var/www
+%define suexec_caller webconfig
 %define mmn 20120211
 %define oldmmnisa %{mmn}-%{__isa_name}-%{__isa_bits}
 %define mmnisa %{mmn}%{__isa_name}%{__isa_bits}
-%define vstring CentOS 
+%define vstring ClearOS
 
 # Drop automatic provides for module DSOs
 %{?filter_setup:
@@ -12,18 +13,18 @@
 %filter_setup
 }
 
-Summary: Apache HTTP Server
-Name: httpd
+Summary: Webconfig HTTP Server
+Name: webconfig-httpd
 Version: 2.4.6
 Release: 31%{?dist}
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
-Source1: centos-noindex.tar.gz
-Source2: httpd.logrotate
+Source1: webconfig-index.html
+Source2: webconfig-httpd.logrotate
 Source3: httpd.sysconf
 Source4: httpd-ssl-pass-dialog
-Source5: httpd.tmpfiles
-Source6: httpd.service
+Source5: webconfig-httpd.tmpfiles
+Source6: webconfig.service
 Source7: action-graceful.sh
 Source8: action-configtest.sh
 Source10: httpd.conf
@@ -36,21 +37,17 @@ Source16: 00-proxy.conf
 Source17: 00-ssl.conf
 Source18: 01-ldap.conf
 Source19: 00-proxyhtml.conf
-Source20: userdir.conf
 Source21: ssl.conf
-Source22: welcome.conf
 Source23: manual.conf
 Source24: 00-systemd.conf
 Source25: 01-session.conf
-# Documentation
-Source30: README.confd
-Source40: htcacheclean.service
-Source41: htcacheclean.sysconf
+Source100: webconfig-openssl.cnf
+Source101: webconfig-prestart.sh
 # build/scripts patches
 Patch1: httpd-2.4.1-apctl.patch
 Patch2: httpd-2.4.3-apxs.patch
 Patch3: httpd-2.4.1-deplibs.patch
-Patch5: httpd-2.4.3-layout.patch
+Patch5: httpd-2.4.4-clearos-layout.patch
 Patch6: httpd-2.4.3-apctl-systemd.patch
 # Features/functional changes
 Patch21: httpd-2.4.6-full-release.patch
@@ -102,105 +99,100 @@ BuildRequires: zlib-devel, libselinux-devel, lua-devel
 BuildRequires: apr-devel >= 1.4.0, apr-util-devel >= 1.2.0, pcre-devel >= 5.0
 BuildRequires: systemd-devel
 Requires: /etc/mime.types, system-logos >= 7.92.1-1
-Obsoletes: httpd-suexec
-Provides: webserver
-Provides: mod_dav = %{version}-%{release}, httpd-suexec = %{version}-%{release}
-Provides: httpd-mmn = %{mmn}, httpd-mmn = %{mmnisa}, httpd-mmn = %{oldmmnisa}
-Requires: httpd-tools = %{version}-%{release}
+Provides: webconfig-webserver
+Provides: webconfig-mod_dav = %{version}-%{release}, webconfig-httpd-suexec = %{version}-%{release}
+Provides: webconfig-httpd-mmn = %{mmn}, webconfig-httpd-mmn = %{mmnisa}
+Requires: webconfig-httpd-tools = %{version}-%{release}
 Requires(pre): /usr/sbin/useradd
 Requires(preun): systemd-units
 Requires(postun): systemd-units
 Requires(post): systemd-units
 
 %description
-The Apache HTTP Server is a powerful, efficient, and extensible
+The Webconfig HTTP Server is a powerful, efficient, and extensible
 web server.
 
 %package devel
 Group: Development/Libraries
-Summary: Development interfaces for the Apache HTTP server
-Obsoletes: secureweb-devel, apache-devel, stronghold-apache-devel
+Summary: Development interfaces for the Webconfig HTTP server
 Requires: apr-devel, apr-util-devel, pkgconfig
-Requires: httpd = %{version}-%{release}
+Requires: webconfig-httpd = %{version}-%{release}
 
 %description devel
-The httpd-devel package contains the APXS binary and other files
+The webconfig-httpd-devel package contains the APXS binary and other files
 that you need to build Dynamic Shared Objects (DSOs) for the
-Apache HTTP Server.
+Webconfig HTTP Server.
 
-If you are installing the Apache HTTP server and you want to be
-able to compile or develop additional modules for Apache, you need
+If you are installing the Webconfig HTTP server and you want to be
+able to compile or develop additional modules for Webconfig, you need
 to install this package.
 
 %package manual
 Group: Documentation
-Summary: Documentation for the Apache HTTP server
-Requires: httpd = %{version}-%{release}
-Obsoletes: secureweb-manual, apache-manual
+Summary: Documentation for the Webconfig HTTP server
+Requires: webconfig-httpd = %{version}-%{release}
 BuildArch: noarch
 
 %description manual
-The httpd-manual package contains the complete manual and
-reference guide for the Apache HTTP server. The information can
+The webconfig-httpd-manual package contains the complete manual and
+reference guide for the Webconfig HTTP server. The information can
 also be found at http://httpd.apache.org/docs/2.2/.
 
 %package tools
 Group: System Environment/Daemons
-Summary: Tools for use with the Apache HTTP Server
+Summary: Tools for use with the Webconfig HTTP Server
 
 %description tools
-The httpd-tools package contains tools which can be used with 
-the Apache HTTP Server.
+The webconfig-httpd-tools package contains tools which can be used with 
+the Webconfig HTTP Server.
 
-%package -n mod_ssl
+%package -n webconfig-mod_ssl
 Group: System Environment/Daemons
-Summary: SSL/TLS module for the Apache HTTP Server
+Summary: SSL/TLS module for the Webconfig HTTP Server
 Epoch: 1
 BuildRequires: openssl-devel
 Requires: openssl-libs >= 1:1.0.1e-37
 Requires(post): openssl, /bin/cat
-Requires(pre): httpd
-Requires: httpd = 0:%{version}-%{release}, httpd-mmn = %{mmnisa}
-Obsoletes: stronghold-mod_ssl
+Requires(pre): webconfig-httpd
+Requires: webconfig-httpd = 0:%{version}-%{release}, webconfig-httpd-mmn = %{mmnisa}
 
-%description -n mod_ssl
-The mod_ssl module provides strong cryptography for the Apache Web
+%description -n webconfig-mod_ssl
+The mod_ssl module provides strong cryptography for the Webconfig Web
 server via the Secure Sockets Layer (SSL) and Transport Layer
 Security (TLS) protocols.
 
-%package -n mod_proxy_html
+%package -n webconfig-mod_proxy_html
 Group: System Environment/Daemons
-Summary: HTML and XML content filters for the Apache HTTP Server
-Requires: httpd = 0:%{version}-%{release}, httpd-mmn = %{mmnisa}
+Summary: HTML and XML content filters for the Webconfig HTTP Server
+Requires: webconfig-httpd = 0:%{version}-%{release}, webconfig-httpd-mmn = %{mmnisa}
 BuildRequires: libxml2-devel
 Epoch: 1
-Obsoletes: mod_proxy_html < 1:2.4.1-2
 
-%description -n mod_proxy_html
+%description -n webconfig-mod_proxy_html
 The mod_proxy_html and mod_xml2enc modules provide filters which can
 transform and modify HTML and XML content.
 
-%package -n mod_ldap
+%package -n webconfig-mod_ldap
 Group: System Environment/Daemons
-Summary: LDAP authentication modules for the Apache HTTP Server
-Requires: httpd = 0:%{version}-%{release}, httpd-mmn = %{mmnisa}
+Summary: LDAP authentication modules for the Webconfig HTTP Server
+Requires: webconfig-httpd = 0:%{version}-%{release}, webconfig-httpd-mmn = %{mmnisa}
 Requires: apr-util-ldap
 
-%description -n mod_ldap
+%description -n webconfig-mod_ldap
 The mod_ldap and mod_authnz_ldap modules add support for LDAP
-authentication to the Apache HTTP Server.
+authentication to the Webconfig HTTP Server.
 
-%package -n mod_session
+%package -n webconfig-mod_session
 Group: System Environment/Daemons
-Summary: Session interface for the Apache HTTP Server
-Requires: httpd = 0:%{version}-%{release}, httpd-mmn = %{mmnisa}
+Summary: Session interface for the Webconfig HTTP Server
+Requires: webconfig-httpd = 0:%{version}-%{release}, webconfig-httpd-mmn = %{mmnisa}
 
-%description -n mod_session
+%description -n webconfig-mod_session
 The mod_session module and associated backends provide an abstract
 interface for storing and accessing per-user session data.
 
 %prep
-%setup -q
+%setup -q -n httpd-%{version}
 %patch1 -p1 -b .apctl
 %patch2 -p1 -b .apxs
 %patch3 -p1 -b .deplibs
@@ -275,8 +267,11 @@ rm -rf srclib/{apr,apr-util,pcre}
 autoheader && autoconf || exit 1
 
 # Before configure; fix location of build dir in generated apxs
-%{__perl} -pi -e "s:\@exp_installbuilddir\@:%{_libdir}/httpd/build:g" \
+%{__perl} -pi -e "s:^(my \\\$installbuilddir = ).*:\$1\"%{_webconfigdir}%{_libdir}/httpd/build\";:g" \
 	support/apxs.in
+%{__perl} -pi -e "s:\@exp_installbuilddir\@:%{_webconfigdir}%{_libdir}/httpd/build:g" \
+	support/apxs.in.apxs                                                                
+
 
 export CFLAGS=$RPM_OPT_FLAGS
 export LDFLAGS="-Wl,-z,relro,-z,now"
@@ -289,18 +284,18 @@ export LDFLAGS="-Wl,-z,relro,-z,now"
 export LYNX_PATH=/usr/bin/links
 
 # Build the daemon
-%configure \
- 	--prefix=%{_sysconfdir}/httpd \
+./configure \
+ 	--prefix=%{_webconfigdir}%{_sysconfdir}/httpd \
  	--exec-prefix=%{_prefix} \
- 	--bindir=%{_bindir} \
- 	--sbindir=%{_sbindir} \
+ 	--bindir=%{_webconfigdir}%{_bindir} \
+ 	--sbindir=%{_webconfigdir}%{_sbindir} \
  	--mandir=%{_mandir} \
-	--libdir=%{_libdir} \
-	--sysconfdir=%{_sysconfdir}/httpd/conf \
-	--includedir=%{_includedir}/httpd \
-	--libexecdir=%{_libdir}/httpd/modules \
+	--libdir=%{_webconfigdir}%{_libdir} \
+	--sysconfdir=%{_webconfigdir}%{_sysconfdir}/httpd/conf \
+	--includedir=%{_includedir}/webconfig-httpd \
+	--libexecdir=%{_webconfigdir}%{_libdir}/httpd/modules \
 	--datadir=%{contentdir} \
-        --enable-layout=Fedora \
+        --enable-layout=ClearOS \
         --with-installbuilddir=%{_libdir}/httpd/build \
         --enable-mpms-shared=all \
         --with-apr=%{_prefix} --with-apr-util=%{_prefix} \
@@ -310,7 +305,7 @@ export LYNX_PATH=/usr/bin/links
 	--with-suexec-docroot=%{docroot} \
 	--without-suexec-logfile \
         --with-suexec-syslog \
-	--with-suexec-bin=%{_sbindir}/suexec \
+	--with-suexec-bin=%{_webconfigdir}%{_sbindir}/suexec \
 	--with-suexec-uidmin=500 --with-suexec-gidmin=100 \
         --enable-pie \
         --with-pcre \
@@ -331,81 +326,77 @@ rm -rf $RPM_BUILD_ROOT
 
 make DESTDIR=$RPM_BUILD_ROOT install
 
+mkdir -p $RPM_BUILD_ROOT%{_sbindir}
+ln -s %{_webconfigdir}%{_sbindir}/httpd $RPM_BUILD_ROOT%{_sbindir}/webconfig 
+
 # Install systemd service files
 mkdir -p $RPM_BUILD_ROOT%{_unitdir}
-for s in httpd htcacheclean; do
+for s in webconfig; do
   install -p -m 644 $RPM_SOURCE_DIR/${s}.service \
                     $RPM_BUILD_ROOT%{_unitdir}/${s}.service
 done
 
 # install conf file/directory
-mkdir $RPM_BUILD_ROOT%{_sysconfdir}/httpd/conf.d \
-      $RPM_BUILD_ROOT%{_sysconfdir}/httpd/conf.modules.d
-install -m 644 $RPM_SOURCE_DIR/README.confd \
-    $RPM_BUILD_ROOT%{_sysconfdir}/httpd/conf.d/README
+mkdir $RPM_BUILD_ROOT%{_webconfigdir}%{_sysconfdir}/httpd/conf.d \
+      $RPM_BUILD_ROOT%{_webconfigdir}%{_sysconfdir}/httpd/conf.modules.d
 for f in 00-base.conf 00-mpm.conf 00-lua.conf 01-cgi.conf 00-dav.conf \
          00-proxy.conf 00-ssl.conf 01-ldap.conf 00-proxyhtml.conf \
          01-ldap.conf 00-systemd.conf 01-session.conf; do
   install -m 644 -p $RPM_SOURCE_DIR/$f \
-        $RPM_BUILD_ROOT%{_sysconfdir}/httpd/conf.modules.d/$f
+        $RPM_BUILD_ROOT%{_webconfigdir}%{_sysconfdir}/httpd/conf.modules.d/$f
 done
 
-for f in welcome.conf ssl.conf manual.conf userdir.conf; do
+for f in ssl.conf manual.conf; do
   install -m 644 -p $RPM_SOURCE_DIR/$f \
-        $RPM_BUILD_ROOT%{_sysconfdir}/httpd/conf.d/$f
+        $RPM_BUILD_ROOT%{_webconfigdir}%{_sysconfdir}/httpd/conf.d/$f
 done
 
+# FIXME
 # Split-out extra config shipped as default in conf.d:
-for f in autoindex; do
-  mv docs/conf/extra/httpd-${f}.conf \
-        $RPM_BUILD_ROOT%{_sysconfdir}/httpd/conf.d/${f}.conf
-done
+#for f in autoindex; do
+#  mv docs/conf/extra/httpd-${f}.conf \
+#        $RPM_BUILD_ROOT%{_webconfigdir}%{_sysconfdir}/httpd/conf.d/${f}.conf
+#done
 
-# Extra config trimmed:
-rm -v docs/conf/extra/httpd-{ssl,userdir}.conf
-
-rm $RPM_BUILD_ROOT%{_sysconfdir}/httpd/conf/*.conf
+rm $RPM_BUILD_ROOT%{_webconfigdir}%{_sysconfdir}/httpd/conf/*.conf
 install -m 644 -p $RPM_SOURCE_DIR/httpd.conf \
-   $RPM_BUILD_ROOT%{_sysconfdir}/httpd/conf/httpd.conf
+   $RPM_BUILD_ROOT%{_webconfigdir}%{_sysconfdir}/httpd/conf/httpd.conf
+install -m 644 -p $RPM_SOURCE_DIR/webconfig-openssl.cnf \
+   $RPM_BUILD_ROOT%{_webconfigdir}%{_sysconfdir}/httpd/conf/openssl.cnf
 
-mkdir $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig
-for s in httpd htcacheclean; do
-  install -m 644 -p $RPM_SOURCE_DIR/${s}.sysconf \
-                    $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig/${s}
-done
+# mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig
+# install -m 644 -p $RPM_SOURCE_DIR/httpd.sysconf \
+#                  $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig/webconfig
 
 # tmpfiles.d configuration
 mkdir -p $RPM_BUILD_ROOT%{_prefix}/lib/tmpfiles.d 
-install -m 644 -p $RPM_SOURCE_DIR/httpd.tmpfiles \
-   $RPM_BUILD_ROOT%{_prefix}/lib/tmpfiles.d/httpd.conf
+install -m 644 -p $RPM_SOURCE_DIR/webconfig-httpd.tmpfiles \
+   $RPM_BUILD_ROOT%{_prefix}/lib/tmpfiles.d/webconfig.conf
 
 # Other directories
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/dav \
-         $RPM_BUILD_ROOT/run/httpd/htcacheclean
+mkdir -p $RPM_BUILD_ROOT%{_webconfigdir}%{_localstatedir}/lib/dav \
 
 # Create cache directory
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/cache/httpd \
-         $RPM_BUILD_ROOT%{_localstatedir}/cache/httpd/proxy \
-         $RPM_BUILD_ROOT%{_localstatedir}/cache/httpd/ssl
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/cache/webconfig-httpd \
+         $RPM_BUILD_ROOT%{_localstatedir}/cache/webconfig-httpd/proxy \
+         $RPM_BUILD_ROOT%{_localstatedir}/cache/webconfig-httpd/ssl
 
 # Make the MMN accessible to module packages
-echo %{mmnisa} > $RPM_BUILD_ROOT%{_includedir}/httpd/.mmn
+echo %{mmnisa} > $RPM_BUILD_ROOT%{_includedir}/webconfig-httpd/.mmn
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/rpm
-cat > $RPM_BUILD_ROOT%{_sysconfdir}/rpm/macros.httpd <<EOF
+cat > $RPM_BUILD_ROOT%{_sysconfdir}/rpm/macros.webconfig-httpd <<EOF
 %%_httpd_mmn %{mmnisa}
-%%_httpd_apxs %{_bindir}/apxs
-%%_httpd_modconfdir %{_sysconfdir}/httpd/conf.modules.d
-%%_httpd_confdir %{_sysconfdir}/httpd/conf.d
+%%_httpd_apxs %%{_webconfigdir}%{_bindir}/apxs
+%%_httpd_modconfdir %%{_webconfigdir}%{_sysconfdir}/httpd/conf.modules.d
+%%_httpd_confdir %%{_webconfigdir}%{_sysconfdir}/httpd/conf.d
 %%_httpd_contentdir %{contentdir}
-%%_httpd_moddir %{_libdir}/httpd/modules
+%%_httpd_moddir %%{_webconfigdir}%{_libdir}/httpd/modules
 EOF
 
 # Handle contentdir
 mkdir $RPM_BUILD_ROOT%{contentdir}/noindex
-tar xzf $RPM_SOURCE_DIR/centos-noindex.tar.gz \
-        -C $RPM_BUILD_ROOT%{contentdir}/noindex/ \
-        --strip-components=1
-
+install -m 644 -p $RPM_SOURCE_DIR/webconfig-index.html \
+        $RPM_BUILD_ROOT%{contentdir}/noindex/index.html
 rm -rf %{contentdir}/htdocs
 
 # remove manual sources
@@ -428,103 +419,90 @@ rm -v $RPM_BUILD_ROOT%{docroot}/html/*.html \
       $RPM_BUILD_ROOT%{docroot}/cgi-bin/*
 
 # Symlink for the powered-by-$DISTRO image:
-ln -s ../noindex/images/poweredby.png \
-        $RPM_BUILD_ROOT%{contentdir}/icons/poweredby.png
+#ln -s ../../pixmaps/poweredby.png \
+#        $RPM_BUILD_ROOT%{contentdir}/icons/poweredby.png
 
 # symlinks for /etc/httpd
-ln -s ../..%{_localstatedir}/log/httpd $RPM_BUILD_ROOT/etc/httpd/logs
-ln -s /run/httpd $RPM_BUILD_ROOT/etc/httpd/run
-ln -s ../..%{_libdir}/httpd/modules $RPM_BUILD_ROOT/etc/httpd/modules
+ln -s %{_localstatedir}/log/webconfig $RPM_BUILD_ROOT%{_webconfigdir}/etc/httpd/logs
+ln -s /run/webconfig-httpd $RPM_BUILD_ROOT%{_webconfigdir}/etc/httpd/run
+ln -s %{_webconfigdir}%{_libdir}/httpd/modules $RPM_BUILD_ROOT%{_webconfigdir}/etc/httpd/modules
 
 # install http-ssl-pass-dialog
-mkdir -p $RPM_BUILD_ROOT%{_libexecdir}
+mkdir -p $RPM_BUILD_ROOT%{_webconfigdir}%{_libexecdir}
 install -m755 $RPM_SOURCE_DIR/httpd-ssl-pass-dialog \
-	$RPM_BUILD_ROOT%{_libexecdir}/httpd-ssl-pass-dialog
+	$RPM_BUILD_ROOT%{_webconfigdir}%{_libexecdir}/httpd-ssl-pass-dialog
 
 # Install action scripts
-mkdir -p $RPM_BUILD_ROOT%{_libexecdir}/initscripts/legacy-actions/httpd
+mkdir -p $RPM_BUILD_ROOT%{_webconfigdir}%{_libexecdir}/initscripts/legacy-actions/httpd
 for f in graceful configtest; do
     install -p -m 755 $RPM_SOURCE_DIR/action-${f}.sh \
-            $RPM_BUILD_ROOT%{_libexecdir}/initscripts/legacy-actions/httpd/${f}
+            $RPM_BUILD_ROOT%{_webconfigdir}%{_libexecdir}/initscripts/legacy-actions/httpd/${f}
 done
 
 # Install logrotate config
 mkdir -p $RPM_BUILD_ROOT/etc/logrotate.d
-install -m 644 -p $RPM_SOURCE_DIR/httpd.logrotate \
-	$RPM_BUILD_ROOT/etc/logrotate.d/httpd
-
-# fix man page paths
-sed -e "s|/usr/local/apache2/conf/httpd.conf|/etc/httpd/conf/httpd.conf|" \
-    -e "s|/usr/local/apache2/conf/mime.types|/etc/mime.types|" \
-    -e "s|/usr/local/apache2/conf/magic|/etc/httpd/conf/magic|" \
-    -e "s|/usr/local/apache2/logs/error_log|/var/log/httpd/error_log|" \
-    -e "s|/usr/local/apache2/logs/access_log|/var/log/httpd/access_log|" \
-    -e "s|/usr/local/apache2/logs/httpd.pid|/run/httpd/httpd.pid|" \
-    -e "s|/usr/local/apache2|/etc/httpd|" < docs/man/httpd.8 \
-  > $RPM_BUILD_ROOT%{_mandir}/man8/httpd.8
+install -m 644 -p $RPM_SOURCE_DIR/webconfig-httpd.logrotate \
+	$RPM_BUILD_ROOT/etc/logrotate.d/webconfig-httpd
 
 # Make ap_config_layout.h libdir-agnostic
 sed -i '/.*DEFAULT_..._LIBEXECDIR/d;/DEFAULT_..._INSTALLBUILDDIR/d' \
-    $RPM_BUILD_ROOT%{_includedir}/httpd/ap_config_layout.h
+    $RPM_BUILD_ROOT%{_includedir}/webconfig-httpd/ap_config_layout.h
 
 # Fix path to instdso in special.mk
 sed -i '/instdso/s,top_srcdir,top_builddir,' \
-    $RPM_BUILD_ROOT%{_libdir}/httpd/build/special.mk
+    $RPM_BUILD_ROOT%{_webconfigdir}%{_libdir}/httpd/build/special.mk
 
 # Remove unpackaged files
 rm -vf \
-      $RPM_BUILD_ROOT%{_libdir}/*.exp \
-      $RPM_BUILD_ROOT/etc/httpd/conf/mime.types \
-      $RPM_BUILD_ROOT%{_libdir}/httpd/modules/*.exp \
-      $RPM_BUILD_ROOT%{_libdir}/httpd/build/config.nice \
-      $RPM_BUILD_ROOT%{_bindir}/{ap?-config,dbmmanage} \
-      $RPM_BUILD_ROOT%{_sbindir}/{checkgid,envvars*} \
-      $RPM_BUILD_ROOT%{contentdir}/htdocs/* \
-      $RPM_BUILD_ROOT%{_mandir}/man1/dbmmanage.* \
+      $RPM_BUILD_ROOT%{_webconfigdir}%{_libdir}/*.exp \
+      $RPM_BUILD_ROOT%{_webconfigdir}/etc/httpd/conf/mime.types \
+      $RPM_BUILD_ROOT%{_webconfigdir}%{_libdir}/httpd/modules/*.exp \
+      $RPM_BUILD_ROOT%{_webconfigdir}%{_libdir}/httpd/build/config.nice \
+      $RPM_BUILD_ROOT%{_webconfigdir}%{_bindir}/{ap?-config,dbmmanage} \
+      $RPM_BUILD_ROOT%{_webconfigdir}%{_sbindir}/{checkgid,envvars*} \
+      $RPM_BUILD_ROOT%{_webconfigdir}%{contentdir}/htdocs/* \
+      $RPM_BUILD_ROOT%{_webconfigdir}%{_mandir}/man1/dbmmanage.* \
       $RPM_BUILD_ROOT%{contentdir}/cgi-bin/*
 
-rm -rf $RPM_BUILD_ROOT/etc/httpd/conf/{original,extra}
+rm -rf $RPM_BUILD_ROOT%{_webconfigdir}/etc/httpd/conf/{original,extra}
+
+rm -rf $RPM_BUILD_ROOT%{_mandir}
+
+install -m 0770 -d $RPM_BUILD_ROOT/%{_localstatedir}/run/webconfig
+
+mkdir -p $RPM_BUILD_ROOT%{_libexecdir}/webconfig
+install -m 0755 %{SOURCE101} $RPM_BUILD_ROOT%{_libexecdir}/webconfig/prestart.sh
 
 %pre
-# Add the "apache" user
-/usr/sbin/useradd -c "Apache" -u 48 \
-	-s /sbin/nologin -r -d %{contentdir} apache 2> /dev/null || :
+# Add the "webconfig" user
+/usr/sbin/useradd -c "Webconfig" \
+	-s /sbin/nologin -r -d %{contentdir} webconfig 2> /dev/null || :
 
 %post
-%systemd_post httpd.service htcacheclean.service
+%systemd_post webconfig.service
 
 %preun
-%systemd_preun httpd.service htcacheclean.service
+%systemd_preun webconfig.service
 
-%postun
-%systemd_postun
-
-# Trigger for conversion from SysV, per guidelines at:
-# https://fedoraproject.org/wiki/Packaging:ScriptletSnippets#Systemd
-%triggerun -- httpd < 2.2.21-5
-# Save the current service runlevel info
-# User must manually run systemd-sysv-convert --apply httpd
-# to migrate them to systemd targets
-/usr/bin/systemd-sysv-convert --save httpd.service >/dev/null 2>&1 ||:
+# Upgrades installed via webconfig should not start webconfig!
+# This scenario is handled externally (a "lazy" restart).
+# % postun
+# % systemd_postun
 
 # Run these because the SysV package being removed won't do them
-/sbin/chkconfig --del httpd >/dev/null 2>&1 || :
-
-%posttrans
-test -f /etc/sysconfig/httpd-disable-posttrans || \
-  /bin/systemctl try-restart httpd.service htcacheclean.service >/dev/null 2>&1 || :
+/sbin/chkconfig --del webconfig >/dev/null 2>&1 || :
 
 %define sslcert %{_sysconfdir}/pki/tls/certs/localhost.crt
 %define sslkey %{_sysconfdir}/pki/tls/private/localhost.key
 
-%post -n mod_ssl
+%post -n webconfig-mod_ssl
 umask 077
 
 if [ -f %{sslkey} -o -f %{sslcert} ]; then
    exit 0
 fi
 
-%{_bindir}/openssl genrsa -rand /proc/apm:/proc/cpuinfo:/proc/dma:/proc/filesystems:/proc/interrupts:/proc/ioports:/proc/pci:/proc/rtc:/proc/uptime 2048 > %{sslkey} 2> /dev/null
+%{_bindir}/openssl genrsa -rand /proc/apm:/proc/cpuinfo:/proc/dma:/proc/filesystems:/proc/interrupts:/proc/ioports:/proc/pci:/proc/rtc:/proc/uptime 1024 > %{sslkey} 2> /dev/null
 
 FQDN=`hostname`
 if [ "x${FQDN}" = "x" ]; then
@@ -559,50 +537,52 @@ rm -rf $RPM_BUILD_ROOT
 %doc ABOUT_APACHE README CHANGES LICENSE VERSIONING NOTICE
 %doc docs/conf/extra/*.conf
 
-%dir %{_sysconfdir}/httpd
-%{_sysconfdir}/httpd/modules
-%{_sysconfdir}/httpd/logs
-%{_sysconfdir}/httpd/run
-%dir %{_sysconfdir}/httpd/conf
-%config(noreplace) %{_sysconfdir}/httpd/conf/httpd.conf
-%config(noreplace) %{_sysconfdir}/httpd/conf/magic
+%dir %{_webconfigdir}%{_sysconfdir}/httpd
+%{_webconfigdir}%{_sysconfdir}/httpd/modules
+%{_webconfigdir}%{_sysconfdir}/httpd/logs
+%{_webconfigdir}%{_sysconfdir}/httpd/run
+%dir %{_webconfigdir}%{_sysconfdir}/httpd/conf
+%{_webconfigdir}%{_sysconfdir}/httpd/conf/openssl.cnf
+%config(noreplace) %{_webconfigdir}%{_sysconfdir}/httpd/conf/httpd.conf
+%config(noreplace) %{_webconfigdir}%{_sysconfdir}/httpd/conf/magic
 
-%config(noreplace) %{_sysconfdir}/logrotate.d/httpd
+%config(noreplace) %{_sysconfdir}/logrotate.d/webconfig-httpd
 
-%dir %{_sysconfdir}/httpd/conf.d
-%{_sysconfdir}/httpd/conf.d/README
-%config(noreplace) %{_sysconfdir}/httpd/conf.d/*.conf
-%exclude %{_sysconfdir}/httpd/conf.d/ssl.conf
-%exclude %{_sysconfdir}/httpd/conf.d/manual.conf
+%dir %{_webconfigdir}%{_sysconfdir}/httpd/conf.d
+%config(noreplace) %{_webconfigdir}%{_sysconfdir}/httpd/conf.d/*.conf
+%exclude %{_webconfigdir}%{_sysconfdir}/httpd/conf.d/ssl.conf
+%exclude %{_webconfigdir}%{_sysconfdir}/httpd/conf.d/manual.conf
 
-%dir %{_sysconfdir}/httpd/conf.modules.d
-%config(noreplace) %{_sysconfdir}/httpd/conf.modules.d/*.conf
-%exclude %{_sysconfdir}/httpd/conf.modules.d/00-ssl.conf
-%exclude %{_sysconfdir}/httpd/conf.modules.d/00-proxyhtml.conf
-%exclude %{_sysconfdir}/httpd/conf.modules.d/01-ldap.conf
-%exclude %{_sysconfdir}/httpd/conf.modules.d/01-session.conf
+%dir %{_webconfigdir}%{_sysconfdir}/httpd/conf.modules.d
+%config(noreplace) %{_webconfigdir}%{_sysconfdir}/httpd/conf.modules.d/*.conf
+%exclude %{_webconfigdir}%{_sysconfdir}/httpd/conf.modules.d/00-ssl.conf
+%exclude %{_webconfigdir}%{_sysconfdir}/httpd/conf.modules.d/00-proxyhtml.conf
+%exclude %{_webconfigdir}%{_sysconfdir}/httpd/conf.modules.d/01-ldap.conf
+%exclude %{_webconfigdir}%{_sysconfdir}/httpd/conf.modules.d/01-session.conf
 
-%config(noreplace) %{_sysconfdir}/sysconfig/ht*
-%{_prefix}/lib/tmpfiles.d/httpd.conf
+# %config(noreplace) %{_sysconfdir}/sysconfig/webconfig
+%{_prefix}/lib/tmpfiles.d/webconfig.conf
 
-%dir %{_libexecdir}/initscripts/legacy-actions/httpd
-%{_libexecdir}/initscripts/legacy-actions/httpd/*
+%dir %{_webconfigdir}%{_libexecdir}/initscripts/legacy-actions/httpd
+%{_webconfigdir}%{_libexecdir}/initscripts/legacy-actions/httpd/*
 
-%{_sbindir}/ht*
-%{_sbindir}/fcgistarter
-%{_sbindir}/apachectl
-%{_sbindir}/rotatelogs
-%caps(cap_setuid,cap_setgid+pe) %attr(510,root,%{suexec_caller}) %{_sbindir}/suexec
+%{_sbindir}/webconfig
+%{_libexecdir}/webconfig/prestart.sh
+%{_webconfigdir}%{_sbindir}/ht*
+%{_webconfigdir}%{_sbindir}/fcgistarter
+%{_webconfigdir}%{_sbindir}/apachectl
+%{_webconfigdir}%{_sbindir}/rotatelogs
+%caps(cap_setuid,cap_setgid+pe) %attr(510,root,%{suexec_caller}) %{_webconfigdir}%{_sbindir}/suexec
 
-%dir %{_libdir}/httpd
-%dir %{_libdir}/httpd/modules
-%{_libdir}/httpd/modules/mod*.so
-%exclude %{_libdir}/httpd/modules/mod_auth_form.so
-%exclude %{_libdir}/httpd/modules/mod_ssl.so
-%exclude %{_libdir}/httpd/modules/mod_*ldap.so
-%exclude %{_libdir}/httpd/modules/mod_proxy_html.so
-%exclude %{_libdir}/httpd/modules/mod_xml2enc.so
-%exclude %{_libdir}/httpd/modules/mod_session*.so
+%dir %{_webconfigdir}%{_libdir}/httpd
+%dir %{_webconfigdir}%{_libdir}/httpd/modules
+%{_webconfigdir}%{_libdir}/httpd/modules/mod*.so
+%exclude %{_webconfigdir}%{_libdir}/httpd/modules/mod_auth_form.so
+%exclude %{_webconfigdir}%{_libdir}/httpd/modules/mod_ssl.so
+%exclude %{_webconfigdir}%{_libdir}/httpd/modules/mod_*ldap.so
+%exclude %{_webconfigdir}%{_libdir}/httpd/modules/mod_proxy_html.so
+%exclude %{_webconfigdir}%{_libdir}/httpd/modules/mod_xml2enc.so
+%exclude %{_webconfigdir}%{_libdir}/httpd/modules/mod_session*.so
 
 %dir %{contentdir}
 %dir %{contentdir}/icons
@@ -613,72 +593,72 @@ rm -rf $RPM_BUILD_ROOT
 %{contentdir}/error/README
 %{contentdir}/error/*.var
 %{contentdir}/error/include/*.html
-%{contentdir}/noindex/*
+%{contentdir}/noindex/index.html
 
 %dir %{docroot}
 %dir %{docroot}/cgi-bin
 %dir %{docroot}/html
 
-%attr(0710,root,apache) %dir /run/httpd
-%attr(0700,apache,apache) %dir /run/httpd/htcacheclean
-%attr(0700,root,root) %dir %{_localstatedir}/log/httpd
-%attr(0700,apache,apache) %dir %{_localstatedir}/lib/dav
-%attr(0700,apache,apache) %dir %{_localstatedir}/cache/httpd
-%attr(0700,apache,apache) %dir %{_localstatedir}/cache/httpd/proxy
+%attr(0710,root,webconfig) %dir /run/webconfig-httpd
+%attr(0755,webconfig,root) %dir %{_localstatedir}/log/webconfig
+#%attr(0700,webconfig,webconfig) %dir %{_localstatedir}/lib/dav
+#%attr(0700,webconfig,webconfig) %dir %{_localstatedir}/cache/webconfig-httpd
+#%attr(0700,webconfig,webconfig) %dir %{_localstatedir}/cache/webconfig-httpd/proxy
 
-%{_mandir}/man8/*
+# Keep this run dir around in ClearOS 7 
+# %attr(0770,root,webconfig) %dir /run/webconfig
 
 %{_unitdir}/*.service
 
 %files tools
 %defattr(-,root,root)
-%{_bindir}/*
-%{_mandir}/man1/*
+%{_webconfigdir}%{_bindir}/*
 %doc LICENSE NOTICE
-%exclude %{_bindir}/apxs
-%exclude %{_mandir}/man1/apxs.1*
+%exclude %{_webconfigdir}%{_bindir}/apxs
 
 %files manual
 %defattr(-,root,root)
 %{contentdir}/manual
-%config(noreplace) %{_sysconfdir}/httpd/conf.d/manual.conf
+%config(noreplace) %{_webconfigdir}%{_sysconfdir}/httpd/conf.d/manual.conf
 
-%files -n mod_ssl
+%files -n webconfig-mod_ssl
 %defattr(-,root,root)
-%{_libdir}/httpd/modules/mod_ssl.so
-%config(noreplace) %{_sysconfdir}/httpd/conf.modules.d/00-ssl.conf
-%config(noreplace) %{_sysconfdir}/httpd/conf.d/ssl.conf
-%attr(0700,apache,root) %dir %{_localstatedir}/cache/httpd/ssl
-%{_libexecdir}/httpd-ssl-pass-dialog
+%{_webconfigdir}%{_libdir}/httpd/modules/mod_ssl.so
+%config(noreplace) %{_webconfigdir}%{_sysconfdir}/httpd/conf.modules.d/00-ssl.conf
+%config(noreplace) %{_webconfigdir}%{_sysconfdir}/httpd/conf.d/ssl.conf
+%attr(0700,webconfig,root) %dir %{_localstatedir}/cache/webconfig-httpd/ssl
+%{_webconfigdir}%{_libexecdir}/httpd-ssl-pass-dialog
 
-%files -n mod_proxy_html
+%files -n webconfig-mod_proxy_html
 %defattr(-,root,root)
-%{_libdir}/httpd/modules/mod_proxy_html.so
-%{_libdir}/httpd/modules/mod_xml2enc.so
-%config(noreplace) %{_sysconfdir}/httpd/conf.modules.d/00-proxyhtml.conf
+%{_webconfigdir}%{_libdir}/httpd/modules/mod_proxy_html.so
+%{_webconfigdir}%{_libdir}/httpd/modules/mod_xml2enc.so
+%config(noreplace) %{_webconfigdir}%{_sysconfdir}/httpd/conf.modules.d/00-proxyhtml.conf
 
-%files -n mod_ldap
+%files -n webconfig-mod_ldap
 %defattr(-,root,root)
-%{_libdir}/httpd/modules/mod_*ldap.so
-%config(noreplace) %{_sysconfdir}/httpd/conf.modules.d/01-ldap.conf
+%{_webconfigdir}%{_libdir}/httpd/modules/mod_*ldap.so
+%config(noreplace) %{_webconfigdir}%{_sysconfdir}/httpd/conf.modules.d/01-ldap.conf
 
-%files -n mod_session
+%files -n webconfig-mod_session
 %defattr(-,root,root)
-%{_libdir}/httpd/modules/mod_session*.so
-%{_libdir}/httpd/modules/mod_auth_form.so
-%config(noreplace) %{_sysconfdir}/httpd/conf.modules.d/01-session.conf
+%{_webconfigdir}%{_libdir}/httpd/modules/mod_session*.so
+%{_webconfigdir}%{_libdir}/httpd/modules/mod_auth_form.so
+%config(noreplace) %{_webconfigdir}%{_sysconfdir}/httpd/conf.modules.d/01-session.conf
 
 %files devel
 %defattr(-,root,root)
-%{_includedir}/httpd
-%{_bindir}/apxs
-%{_mandir}/man1/apxs.1*
-%dir %{_libdir}/httpd/build
-%{_libdir}/httpd/build/*.mk
-%{_libdir}/httpd/build/*.sh
-%{_sysconfdir}/rpm/macros.httpd
+%{_includedir}/webconfig-httpd
+%{_webconfigdir}%{_bindir}/apxs
+%dir %{_webconfigdir}%{_libdir}/httpd/build
+%{_webconfigdir}%{_libdir}/httpd/build/*.mk
+%{_webconfigdir}%{_libdir}/httpd/build/*.sh
+%{_sysconfdir}/rpm/macros.webconfig-httpd
 
 %changelog
+* Tue Apr 14 2015 ClearFoundation <developer@clearfoundation.com> - 2.4.6-31.clear
+- create sandboxed web server
+
 * Thu Mar 05 2015 CentOS Sources <bugs@centos.org> - 2.4.6-31.el7.centos
 - Remove index.html, add centos-noindex.tar.gz
 - change vstring

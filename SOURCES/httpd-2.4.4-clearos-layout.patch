@@ -1,15 +1,13 @@
-
-Add layout for Fedora.
-
---- httpd-2.4.3/config.layout.layout
-+++ httpd-2.4.3/config.layout
+diff -rup httpd-2.4.4/config.layout httpd-2.4.4-clearos-layout/config.layout
+--- httpd-2.4.4/config.layout	2012-04-17 10:01:41.000000000 -0400
++++ httpd-2.4.4-clearos-layout/config.layout	2013-09-12 21:02:02.040322847 -0400
 @@ -370,3 +370,27 @@
      logfiledir:      ${localstatedir}/log/httpd
      proxycachedir:   ${localstatedir}/cache/httpd
  </Layout>
 +
-+# Fedora/RHEL layout
-+<Layout Fedora>
++# ClearOS Webconfig layout
++<Layout ClearOS>
 +    prefix:        /usr
 +    exec_prefix:   ${prefix}
 +    bindir:        ${prefix}/bin
@@ -17,17 +15,17 @@ Add layout for Fedora.
 +    libdir:        ${prefix}/lib
 +    libexecdir:    ${prefix}/libexec
 +    mandir:        ${prefix}/man
-+    sysconfdir:    /etc/httpd/conf
-+    datadir:       ${prefix}/share/httpd
++    sysconfdir:    /usr/clearos/sandbox/etc/httpd/conf
++    datadir:       /usr/clearos/sandbox/${prefix}/share/httpd
 +    installbuilddir: ${libdir}/httpd/build
 +    errordir:      ${datadir}/error
 +    iconsdir:      ${datadir}/icons
-+    htdocsdir:     /var/www/html
++    htdocsdir:     /usr/clearos/sandbox/var/www/html
 +    manualdir:     ${datadir}/manual
-+    cgidir:        /var/www/cgi-bin
-+    includedir:    ${prefix}/include/httpd
++    cgidir:        /usr/clearos/sandbox/var/www/cgi-bin
++    includedir:    ${prefix}/include/webconfig-httpd
 +    localstatedir: /var
-+    runtimedir:    /run/httpd
-+    logfiledir:    ${localstatedir}/log/httpd
-+    proxycachedir: ${localstatedir}/cache/httpd/proxy
-+</Layout>     
++    runtimedir:    /run/webconfig-httpd
++    logfiledir:    ${localstatedir}/log/webconfig
++    proxycachedir: ${localstatedir}/cache/webconfig/proxy
++</Layout>
