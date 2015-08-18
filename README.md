@@ -2,9 +2,6 @@
 
 Forked version of httpd in a chroot with ClearOS changes applied
 
-## Update usage
-  Add __#kojibuild__ to commit message to automatically build
-
 * git clone git+ssh://git@github.com/clearos/webconfig-httpd.git
 * cd webconfig-httpd
 * git checkout c7
