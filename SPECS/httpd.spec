@@ -4,7 +4,7 @@
 %define mmn 20120211
 %define oldmmnisa %{mmn}-%{__isa_name}-%{__isa_bits}
 %define mmnisa %{mmn}%{__isa_name}%{__isa_bits}
-%define vstring CentOS 
+%define vstring %(source /etc/os-release; echo ${REDHAT_SUPPORT_PRODUCT})
 
 # Drop automatic provides for module DSOs
 %{?filter_setup:
@@ -15,10 +15,10 @@
 Summary: Apache HTTP Server
 Name: httpd
 Version: 2.4.6
-Release: 31%{?dist}
+Release: 31%{?dist}.1
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
-Source1: centos-noindex.tar.gz
+Source1: index.html
 Source2: httpd.logrotate
 Source3: httpd.sysconf
 Source4: httpd-ssl-pass-dialog
@@ -94,6 +94,8 @@ Patch205: httpd-2.4.6-CVE-2014-0226.patch
 Patch206: httpd-2.4.6-CVE-2013-4352.patch
 Patch207: httpd-2.4.6-CVE-2013-5704.patch
 Patch208: httpd-2.4.6-CVE-2014-3581.patch
+Patch209: httpd-2.4.6-CVE-2015-3185.patch
+Patch210: httpd-2.4.6-CVE-2015-3183.patch
 License: ASL 2.0
 Group: System Environment/Daemons
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -249,6 +251,8 @@ rm modules/ssl/ssl_engine_dh.c
 %patch206 -p1 -b .cve4352
 %patch207 -p1 -b .cve5704
 %patch208 -p1 -b .cve3581
+%patch209 -p1 -b .cve3185
+%patch210 -p1 -b .cve3183
 
 # Patch in the vendor string and the release string
 sed -i '/^#define PLATFORM/s/Unix/%{vstring}/' os/unix/os.h
@@ -402,10 +406,8 @@ EOF
 
 # Handle contentdir
 mkdir $RPM_BUILD_ROOT%{contentdir}/noindex
-tar xzf $RPM_SOURCE_DIR/centos-noindex.tar.gz \
-        -C $RPM_BUILD_ROOT%{contentdir}/noindex/ \
-        --strip-components=1
-
+install -m 644 -p $RPM_SOURCE_DIR/index.html \
+        $RPM_BUILD_ROOT%{contentdir}/noindex/index.html
 rm -rf %{contentdir}/htdocs
 
 # remove manual sources
@@ -428,7 +430,7 @@ rm -v $RPM_BUILD_ROOT%{docroot}/html/*.html \
       $RPM_BUILD_ROOT%{docroot}/cgi-bin/*
 
 # Symlink for the powered-by-$DISTRO image:
-ln -s ../noindex/images/poweredby.png \
+ln -s ../../pixmaps/poweredby.png \
         $RPM_BUILD_ROOT%{contentdir}/icons/poweredby.png
 
 # symlinks for /etc/httpd
@@ -613,7 +615,7 @@ rm -rf $RPM_BUILD_ROOT
 %{contentdir}/error/README
 %{contentdir}/error/*.var
 %{contentdir}/error/include/*.html
-%{contentdir}/noindex/*
+%{contentdir}/noindex/index.html
 
 %dir %{docroot}
 %dir %{docroot}/cgi-bin
@@ -679,11 +681,10 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/rpm/macros.httpd
 
 %changelog
-* Thu Mar 05 2015 CentOS Sources <bugs@centos.org> - 2.4.6-31.el7.centos
-- Remove index.html, add centos-noindex.tar.gz
-- change vstring
-- change symlink for poweredby.png
-- update welcome.conf with proper aliases
+* Mon Aug 10 2015 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-31.1
+- core: fix chunk header parsing defect (CVE-2015-3183)
+- core: replace of ap_some_auth_required with ap_some_authn_required
+  and ap_force_authn hook (CVE-2015-3185)
 
 * Tue Dec 02 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-31
 - mod_proxy_fcgi: determine if FCGI_CONN_CLOSE should be enabled
