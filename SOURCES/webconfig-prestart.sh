@@ -39,7 +39,7 @@ umask 77
 sed -e "s/^CN .*/CN = $HOSTNAME/" $SSL_CONF > /var/tmp/openssl.cnf.$$
 
 # Generate keys
-/usr/bin/openssl genrsa -out $KEY 1024 2>/dev/null
+/usr/bin/openssl genrsa -out $KEY 2048 2>/dev/null
 /usr/bin/openssl req -new -key $KEY -x509 -out $CRT -config /var/tmp/openssl.cnf.$$ -days 3000 -set_serial `date "+%s"` 2>/dev/null
 
 # Fix file permissions and ownership
