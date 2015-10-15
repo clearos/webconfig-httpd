@@ -14,7 +14,7 @@ ExecStop=/usr/sbin/webconfig $OPTIONS -k graceful-stop
 # ExecStop, which would kill httpd. We are sending useless SIGCONT here to give
 # httpd time to finish.
 KillSignal=SIGCONT
-PrivateTmp=true
+PrivateTmp=false
 
 [Install]
 WantedBy=multi-user.target
