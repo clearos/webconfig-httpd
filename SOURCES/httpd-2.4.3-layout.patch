@@ -3,7 +3,7 @@ Add layout for Fedora.
 
 --- httpd-2.4.3/config.layout.layout
 +++ httpd-2.4.3/config.layout
-@@ -370,3 +370,27 @@
+@@ -370,3 +370,28 @@
      logfiledir:      ${localstatedir}/log/httpd
      proxycachedir:   ${localstatedir}/cache/httpd
  </Layout>
@@ -30,4 +30,5 @@ Add layout for Fedora.
 +    runtimedir:    /run/httpd
 +    logfiledir:    ${localstatedir}/log/httpd
 +    proxycachedir: ${localstatedir}/cache/httpd/proxy
++    davlockdb:     ${localstatedir}/lib/dav/lockdb
 +</Layout>     

@@ -4,7 +4,7 @@
 %define mmn 20120211
 %define oldmmnisa %{mmn}-%{__isa_name}-%{__isa_bits}
 %define mmnisa %{mmn}%{__isa_name}%{__isa_bits}
-%define vstring CentOS
+%define vstring %(source /etc/os-release; echo ${REDHAT_SUPPORT_PRODUCT})
 
 # Drop automatic provides for module DSOs
 %{?filter_setup:
@@ -15,10 +15,10 @@
 Summary: Apache HTTP Server
 Name: httpd
 Version: 2.4.6
-Release: 31%{?dist}.1
+Release: 40%{?dist}
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
-Source1: centos-noindex.tar.gz
+Source1: index.html
 Source2: httpd.logrotate
 Source3: httpd.sysconf
 Source4: httpd-ssl-pass-dialog
@@ -69,6 +69,7 @@ Patch34: httpd-2.4.6-ssl-large-keys.patch
 Patch35: httpd-2.4.6-pre_htaccess.patch
 Patch36: httpd-2.4.6-r1573626.patch
 Patch37: httpd-2.4.6-uds.patch
+Patch38: httpd-2.4.6-upn.patch
 # Bug fixes
 Patch51: httpd-2.4.3-sslsninotreq.patch
 Patch55: httpd-2.4.4-malformed-host.patch
@@ -84,6 +85,31 @@ Patch64: httpd-2.4.6-ssl-ecdh-auto.patch
 Patch65: httpd-2.4.6-r1556818.patch
 Patch66: httpd-2.4.6-r1618851.patch
 Patch67: httpd-2.4.6-r1526189.patch
+Patch68: httpd-2.4.6-r1663647.patch
+Patch69: httpd-2.4.6-r1569006.patch
+Patch70: httpd-2.4.6-r1506474.patch
+Patch71: httpd-2.4.6-bomb.patch
+Patch72: httpd-2.4.6-r1604460.patch
+Patch73: httpd-2.4.6-r1624349.patch
+Patch74: httpd-2.4.6-ap-ipv6.patch
+Patch75: httpd-2.4.6-r1530280.patch
+Patch76: httpd-2.4.6-r1633085.patch
+Patch78: httpd-2.4.6-ssl-error-free.patch
+Patch79: httpd-2.4.6-r1528556.patch
+Patch80: httpd-2.4.6-r1594625.patch
+Patch81: httpd-2.4.6-r1674222.patch
+Patch82: httpd-2.4.6-apachectl-httpd-env.patch
+Patch83: httpd-2.4.6-rewrite-dir.patch
+Patch84: httpd-2.4.6-r1420184.patch
+Patch85: httpd-2.4.6-r1524368.patch
+Patch86: httpd-2.4.6-r1528958.patch
+Patch87: httpd-2.4.6-r1651083.patch
+Patch88: httpd-2.4.6-r1688399.patch
+Patch89: httpd-2.4.6-r1527509.patch
+Patch90: httpd-2.4.6-apachectl-status.patch
+Patch91: httpd-2.4.6-r1650655.patch
+Patch92: httpd-2.4.6-r1533448.patch
+Patch93: httpd-2.4.6-r1610013.patch
 # Security fixes
 Patch200: httpd-2.4.6-CVE-2013-6438.patch
 Patch201: httpd-2.4.6-CVE-2014-0098.patch
@@ -158,7 +184,7 @@ the Apache HTTP Server.
 Group: System Environment/Daemons
 Summary: SSL/TLS module for the Apache HTTP Server
 Epoch: 1
-BuildRequires: openssl-devel
+BuildRequires: openssl-devel >= 1:1.0.1e-37
 Requires: openssl-libs >= 1:1.0.1e-37
 Requires(post): openssl, /bin/cat
 Requires(pre): httpd
@@ -226,6 +252,7 @@ rm modules/ssl/ssl_engine_dh.c
 %patch35 -p1 -b .prehtaccess
 %patch36 -p1 -b .r1573626
 %patch37 -p1 -b .uds
+%patch38 -p1 -b .upn
 
 %patch51 -p1 -b .sninotreq
 %patch55 -p1 -b .malformedhost
@@ -241,6 +268,31 @@ rm modules/ssl/ssl_engine_dh.c
 %patch65 -p1 -b .r1556818
 %patch66 -p1 -b .r1618851
 %patch67 -p1 -b .r1526189
+%patch68 -p1 -b .r1663647
+%patch69 -p1 -b .1569006
+%patch70 -p1 -b .r1506474
+%patch71 -p1 -b .bomb
+%patch72 -p1 -b .r1604460
+%patch73 -p1 -b .r1624349
+%patch74 -p1 -b .abipv6
+%patch75 -p1 -b .r1530280
+%patch76 -p1 -b .r1633085
+%patch78 -p1 -b .sslerrorfree
+%patch79 -p1 -b .r1528556
+%patch80 -p1 -b .r1594625
+%patch81 -p1 -b .r1674222
+%patch82 -p1 -b .envhttpd
+%patch83 -p1 -b .rewritedir
+%patch84 -p1 -b .r1420184
+%patch85 -p1 -b .r1524368
+%patch86 -p1 -b .r1528958
+%patch87 -p1 -b .r1651083
+%patch88 -p1 -b .r1688399
+%patch89 -p1 -b .r1527509
+%patch90 -p1 -b .apachectlstatus
+%patch91 -p1 -b .r1650655
+%patch92 -p1 -b .r1533448
+%patch93 -p1 -b .r1610013
 
 %patch200 -p1 -b .cve6438
 %patch201 -p1 -b .cve0098
@@ -406,10 +458,8 @@ EOF
 
 # Handle contentdir
 mkdir $RPM_BUILD_ROOT%{contentdir}/noindex
-tar xzf $RPM_SOURCE_DIR/centos-noindex.tar.gz \
-        -C $RPM_BUILD_ROOT%{contentdir}/noindex/ \
-        --strip-components=1
-
+install -m 644 -p $RPM_SOURCE_DIR/index.html \
+        $RPM_BUILD_ROOT%{contentdir}/noindex/index.html
 rm -rf %{contentdir}/htdocs
 
 # remove manual sources
@@ -432,7 +482,7 @@ rm -v $RPM_BUILD_ROOT%{docroot}/html/*.html \
       $RPM_BUILD_ROOT%{docroot}/cgi-bin/*
 
 # Symlink for the powered-by-$DISTRO image:
-ln -s ../noindex/images/poweredby.png \
+ln -s ../../pixmaps/poweredby.png \
         $RPM_BUILD_ROOT%{contentdir}/icons/poweredby.png
 
 # symlinks for /etc/httpd
@@ -617,7 +667,7 @@ rm -rf $RPM_BUILD_ROOT
 %{contentdir}/error/README
 %{contentdir}/error/*.var
 %{contentdir}/error/include/*.html
-%{contentdir}/noindex/*
+%{contentdir}/noindex/index.html
 
 %dir %{docroot}
 %dir %{docroot}/cgi-bin
@@ -683,16 +733,62 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/rpm/macros.httpd
 
 %changelog
-* Mon Aug 24 2015 CentOS Sources <bugs@centos.org> - 2.4.6-31.el7.centos.1
-- Remove index.html, add centos-noindex.tar.gz
-- change vstring
-- change symlink for poweredby.png
-- update welcome.conf with proper aliases
+* Thu Sep 17 2015 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-40
+- mod_dav: follow up fix for previous commit (#1263975)
 
-* Mon Aug 10 2015 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-31.1
+* Wed Aug 26 2015 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-39
+- mod_dav: treat dav_resource uri as escaped (#1255480)
+
+* Wed Aug 19 2015 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-38
+- mod_ssl: add support for User Principal Name in SSLUserName  (#1242503)
+
+* Mon Aug 10 2015 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-37
 - core: fix chunk header parsing defect (CVE-2015-3183)
 - core: replace of ap_some_auth_required with ap_some_authn_required
   and ap_force_authn hook (CVE-2015-3185)
+
+* Tue Jul 14 2015 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-36
+- Revert fix for #1162152, it is not needed in RHEL7
+- mod_proxy_ajp: fix settings ProxyPass parameters for AJP backends (#1242416)
+
+* Wed Jul 01 2015 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-35
+- mod_remoteip: correct the trusted proxy match test (#1179306)
+- mod_dav: send complete response when resource is created (#1235383)
+- apachectl: correct the apachectl status man page (#1231924)
+
+* Wed Jun 03 2015 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-34
+- mod_proxy_fcgi: honor Timeout / ProxyTimeout (#1222328)
+- do not show all vhosts twice in httpd -D DUMP_VHOSTS output (#1225820)
+- fix -D[efined] or <Define>[d] variables lifetime accross restarts (#1227219)
+- mod_ssl: do not send NPN extension with not configured (#1226015)
+
+* Mon May 18 2015 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-33
+- mod_authz_dbm: fix crash when using "Require dbm-file-group" (#1221575)
+
+* Wed Apr 15 2015 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-32
+- mod_authn_dbd: fix use-after-free bug with postgresql (#1188779)
+- mod_remoteip: correct the trusted proxy match test (#1179306)
+- mod_status: honor remote_ip as documented (#1169081)
+- mod_deflate: fix decompression of files larger than 4GB (#1170214)
+- core: improve error message for inaccessible DocumentRoot (#1170220)
+- ab: try all addresses instead of failing on first one when not available (#1125276)
+- mod_proxy_wstunnel: add support for SSL (#1180745)
+- mod_proxy_wstunnel: load this module by default (#1180745)
+- mod_rewrite: add support for WebSockets (#1180745)
+- mod_rewrite: do not search for directory if a URL will be rewritten (#1210091)
+- mod_ssl: Fix SSL_CLIENT_VERIFY value when optional_no_ca and SSLSessionCache
+  are used and SSL session is resumed (#1170206)
+- mod_ssl: fix memory leak on httpd reloads (#1181690)
+- mod_ssl: use SSLCipherSuite HIGH:MEDIUM:!aNULL:!MD5:!SEED:!IDEA (#1118476)
+- mod_cgi: return error code 408 on timeout (#1162152)
+- mod_dav_fs: set default value of DAVLockDB (#1176449)
+- add Documentation= to the httpd.service and htcacheclean.service (#1184118)
+- do not display "bomb" icon for files ending with "core" (#1170215)
+- add missing Reason-Phrase in HTTP response headers (#1162159)
+- fix BuildRequires to require openssl-devel >= 1:1.0.1e-37 (#1160625)
+- apachectl: ignore HTTPD variable from sysconfig (#1214401)
+- apachectl: fix "graceful" documentation (#1214398)
+- apachectl: fix "graceful" behaviour when httpd is not running (#1214430)
 
 * Tue Dec 02 2014 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-31
 - mod_proxy_fcgi: determine if FCGI_CONN_CLOSE should be enabled

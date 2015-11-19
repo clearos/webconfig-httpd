@@ -199,7 +199,7 @@ http://svn.apache.org/viewvc?view=revision&revision=1487772
 +    /* If the connection object is not available, or there are no NPN
 +     * hooks registered, then there's nothing for us to do. */
 +    if (c == NULL || sslconn->npn_advertfns == NULL) {
-+        return SSL_TLSEXT_ERR_OK;
++        return SSL_TLSEXT_ERR_NOACK;
 +    }
 +
 +    /* Invoke our npn_advertise_protos hook, giving other modules a chance to
@@ -238,7 +238,7 @@ http://svn.apache.org/viewvc?view=revision&revision=1487772
 +     * anything to the protos array, or because all strings added to the array
 +     * were skipped), then we're done. */
 +    if (size == 0) {
-+        return SSL_TLSEXT_ERR_OK;
++        return SSL_TLSEXT_ERR_NOACK;
 +    }
 +
 +    /* Now we can build the string.  Copy each protocol name string into the
