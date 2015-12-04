@@ -1,2 +1,2 @@
 #!/bin/sh
-exec /sbin/apachectl configtest "$@"
+exec /sbin/apachectl configtest
