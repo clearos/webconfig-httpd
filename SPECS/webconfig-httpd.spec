@@ -16,7 +16,7 @@
 Summary: Webconfig HTTP Server
 Name: webconfig-httpd
 Version: 2.4.6
-Release: 40%{?dist}
+Release: 40%{?dist}.1
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
 Source1: webconfig-index.html
@@ -602,7 +602,7 @@ rm -rf $RPM_BUILD_ROOT
 %config(noreplace) %{_webconfigdir}%{_sysconfdir}/httpd/conf/httpd.conf
 %config(noreplace) %{_webconfigdir}%{_sysconfdir}/httpd/conf/magic
 
-%config(noreplace) %{_sysconfdir}/logrotate.d/webconfig-httpd
+%{_sysconfdir}/logrotate.d/webconfig-httpd
 
 %dir %{_webconfigdir}%{_sysconfdir}/httpd/conf.d
 %config(noreplace) %{_webconfigdir}%{_sysconfdir}/httpd/conf.d/*.conf
@@ -712,7 +712,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/rpm/macros.webconfig-httpd
 
 %changelog
-* Thu Dec 03 2015 ClearFoundation <developer@clearfoundation.com> - 2.4.6-40.clear
+* Thu Mar 10 2016 ClearFoundation <developer@clearfoundation.com> - 2.4.6-40.clear.1
 - create sandboxed web server
 
 * Wed Nov 18 2015 CentOS Sources <bugs@centos.org> - 2.4.6-40.el7.centos
