@@ -4,7 +4,7 @@
 %define mmn 20120211
 %define oldmmnisa %{mmn}-%{__isa_name}-%{__isa_bits}
 %define mmnisa %{mmn}%{__isa_name}%{__isa_bits}
-%define vstring CentOS
+%define vstring %(source /etc/os-release; echo ${REDHAT_SUPPORT_PRODUCT})
 
 # Drop automatic provides for module DSOs
 %{?filter_setup:
@@ -15,10 +15,10 @@
 Summary: Apache HTTP Server
 Name: httpd
 Version: 2.4.6
-Release: 40%{?dist}
+Release: 40%{?dist}.1
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
-Source1: centos-noindex.tar.gz
+Source1: index.html
 Source2: httpd.logrotate
 Source3: httpd.sysconf
 Source4: httpd-ssl-pass-dialog
@@ -136,6 +136,7 @@ Provides: mod_dav = %{version}-%{release}, httpd-suexec = %{version}-%{release}
 Provides: httpd-mmn = %{mmn}, httpd-mmn = %{mmnisa}, httpd-mmn = %{oldmmnisa}
 Requires: httpd-tools = %{version}-%{release}
 Requires(pre): /usr/sbin/useradd
+Requires(pre): /usr/sbin/groupadd
 Requires(preun): systemd-units
 Requires(postun): systemd-units
 Requires(post): systemd-units
@@ -458,10 +459,8 @@ EOF
 
 # Handle contentdir
 mkdir $RPM_BUILD_ROOT%{contentdir}/noindex
-tar xzf $RPM_SOURCE_DIR/centos-noindex.tar.gz \
-        -C $RPM_BUILD_ROOT%{contentdir}/noindex/ \
-        --strip-components=1
-
+install -m 644 -p $RPM_SOURCE_DIR/index.html \
+        $RPM_BUILD_ROOT%{contentdir}/noindex/index.html
 rm -rf %{contentdir}/htdocs
 
 # remove manual sources
@@ -484,7 +483,7 @@ rm -v $RPM_BUILD_ROOT%{docroot}/html/*.html \
       $RPM_BUILD_ROOT%{docroot}/cgi-bin/*
 
 # Symlink for the powered-by-$DISTRO image:
-ln -s ../noindex/images/poweredby.png \
+ln -s ../../pixmaps/poweredby.png \
         $RPM_BUILD_ROOT%{contentdir}/icons/poweredby.png
 
 # symlinks for /etc/httpd
@@ -542,8 +541,9 @@ rm -vf \
 rm -rf $RPM_BUILD_ROOT/etc/httpd/conf/{original,extra}
 
 %pre
-# Add the "apache" user
-/usr/sbin/useradd -c "Apache" -u 48 \
+# Add the "apache" group and user
+/usr/sbin/groupadd -g 48 -r apache 2> /dev/null || :
+/usr/sbin/useradd -c "Apache" -u 48 -g 48 \
 	-s /sbin/nologin -r -d %{contentdir} apache 2> /dev/null || :
 
 %post
@@ -669,7 +669,7 @@ rm -rf $RPM_BUILD_ROOT
 %{contentdir}/error/README
 %{contentdir}/error/*.var
 %{contentdir}/error/include/*.html
-%{contentdir}/noindex/*
+%{contentdir}/noindex/index.html
 
 %dir %{docroot}
 %dir %{docroot}/cgi-bin
@@ -735,11 +735,8 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/rpm/macros.httpd
 
 %changelog
-* Wed Nov 18 2015 CentOS Sources <bugs@centos.org> - 2.4.6-40.el7.centos
-- Remove index.html, add centos-noindex.tar.gz
-- change vstring
-- change symlink for poweredby.png
-- update welcome.conf with proper aliases
+* Mon Mar 21 2016 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-40.1
+- fix apache user creation when apache group already exists (#1319001)
 
 * Thu Sep 17 2015 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-40
 - mod_dav: follow up fix for previous commit (#1263975)
