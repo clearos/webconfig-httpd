@@ -4,7 +4,7 @@
 %define mmn 20120211
 %define oldmmnisa %{mmn}-%{__isa_name}-%{__isa_bits}
 %define mmnisa %{mmn}%{__isa_name}%{__isa_bits}
-%define vstring CentOS
+%define vstring %(source /etc/os-release; echo ${REDHAT_SUPPORT_PRODUCT})
 
 # Drop automatic provides for module DSOs
 %{?filter_setup:
@@ -15,10 +15,10 @@
 Summary: Apache HTTP Server
 Name: httpd
 Version: 2.4.6
-Release: 40%{?dist}.1
+Release: 40%{?dist}.4
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
-Source1: centos-noindex.tar.gz
+Source1: index.html
 Source2: httpd.logrotate
 Source3: httpd.sysconf
 Source4: httpd-ssl-pass-dialog
@@ -110,6 +110,8 @@ Patch90: httpd-2.4.6-apachectl-status.patch
 Patch91: httpd-2.4.6-r1650655.patch
 Patch92: httpd-2.4.6-r1533448.patch
 Patch93: httpd-2.4.6-r1610013.patch
+Patch105: httpd-2.4.6-r1560093.patch
+Patch106: httpd-2.4.6-r1748212.patch
 # Security fixes
 Patch200: httpd-2.4.6-CVE-2013-6438.patch
 Patch201: httpd-2.4.6-CVE-2014-0098.patch
@@ -122,6 +124,7 @@ Patch207: httpd-2.4.6-CVE-2013-5704.patch
 Patch208: httpd-2.4.6-CVE-2014-3581.patch
 Patch209: httpd-2.4.6-CVE-2015-3185.patch
 Patch210: httpd-2.4.6-CVE-2015-3183.patch
+Patch211: httpd-2.4.6-CVE-2016-5387.patch
 License: ASL 2.0
 Group: System Environment/Daemons
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -294,6 +297,8 @@ rm modules/ssl/ssl_engine_dh.c
 %patch91 -p1 -b .r1650655
 %patch92 -p1 -b .r1533448
 %patch93 -p1 -b .r1610013
+%patch105 -p1 -b .r1560093
+%patch106 -p1 -b .r1748212
 
 %patch200 -p1 -b .cve6438
 %patch201 -p1 -b .cve0098
@@ -306,6 +311,7 @@ rm modules/ssl/ssl_engine_dh.c
 %patch208 -p1 -b .cve3581
 %patch209 -p1 -b .cve3185
 %patch210 -p1 -b .cve3183
+%patch211 -p1 -b .cve5387
 
 # Patch in the vendor string and the release string
 sed -i '/^#define PLATFORM/s/Unix/%{vstring}/' os/unix/os.h
@@ -459,10 +465,8 @@ EOF
 
 # Handle contentdir
 mkdir $RPM_BUILD_ROOT%{contentdir}/noindex
-tar xzf $RPM_SOURCE_DIR/centos-noindex.tar.gz \
-        -C $RPM_BUILD_ROOT%{contentdir}/noindex/ \
-        --strip-components=1
-
+install -m 644 -p $RPM_SOURCE_DIR/index.html \
+        $RPM_BUILD_ROOT%{contentdir}/noindex/index.html
 rm -rf %{contentdir}/htdocs
 
 # remove manual sources
@@ -485,7 +489,7 @@ rm -v $RPM_BUILD_ROOT%{docroot}/html/*.html \
       $RPM_BUILD_ROOT%{docroot}/cgi-bin/*
 
 # Symlink for the powered-by-$DISTRO image:
-ln -s ../noindex/images/poweredby.png \
+ln -s ../../pixmaps/poweredby.png \
         $RPM_BUILD_ROOT%{contentdir}/icons/poweredby.png
 
 # symlinks for /etc/httpd
@@ -671,7 +675,7 @@ rm -rf $RPM_BUILD_ROOT
 %{contentdir}/error/README
 %{contentdir}/error/*.var
 %{contentdir}/error/include/*.html
-%{contentdir}/noindex/*
+%{contentdir}/noindex/index.html
 
 %dir %{docroot}
 %dir %{docroot}/cgi-bin
@@ -737,11 +741,14 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/rpm/macros.httpd
 
 %changelog
-* Thu May 12 2016 CentOS Sources <bugs@centos.org> - 2.4.6-40.el7.centos.1
-- Remove index.html, add centos-noindex.tar.gz
-- change vstring
-- change symlink for poweredby.png
-- update welcome.conf with proper aliases
+* Tue Jul 12 2016 Joe Orton <jorton@redhat.com> - 2.4.6-40.4
+- add security fix for CVE-2016-5387
+
+* Thu Jul  7 2016 Joe Orton <jorton@redhat.com> - 2.4.6-40.3
+- add 451 (Unavailable For Legal Reasons) response status-code (#1353269)
+
+* Fri Jun 17 2016 Joe Orton <jorton@redhat.com> - 2.4.6-40.2
+- mod_cache: treat cache as valid with changed Expires in 304 (#1347648)
 
 * Mon Mar 21 2016 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-40.1
 - fix apache user creation when apache group already exists (#1319001)
