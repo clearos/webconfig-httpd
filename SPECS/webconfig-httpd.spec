@@ -16,7 +16,7 @@
 Summary: Webconfig HTTP Server
 Name: webconfig-httpd
 Version: 2.4.6
-Release: 40%{?dist}.1
+Release: 40%{?dist}.2
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
 Source1: webconfig-index.html
