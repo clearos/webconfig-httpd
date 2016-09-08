@@ -16,7 +16,7 @@
 Summary: Webconfig HTTP Server
 Name: webconfig-httpd
 Version: 2.4.6
-Release: 40%{?dist}.4
+Release: 40%{?dist}.5
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
 Source1: webconfig-index.html
@@ -537,7 +537,6 @@ mkdir -p $RPM_BUILD_ROOT%{_libexecdir}/webconfig
 install -m 0755 %{SOURCE101} $RPM_BUILD_ROOT%{_libexecdir}/webconfig/prestart.sh
 
 %pre
-<<<<<<< HEAD:SPECS/webconfig-httpd.spec
 /usr/sbin/useradd -c "Webconfig" \
 	-s /sbin/nologin -r -d %{contentdir} webconfig 2> /dev/null || :
 
