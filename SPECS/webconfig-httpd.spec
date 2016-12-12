@@ -16,7 +16,7 @@
 Summary: Webconfig HTTP Server
 Name: webconfig-httpd
 Version: 2.4.6
-Release: 40%{?dist}.5
+Release: 45%{?dist}
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
 Source1: webconfig-index.html
@@ -67,6 +67,7 @@ Patch35: httpd-2.4.6-pre_htaccess.patch
 Patch36: httpd-2.4.6-r1573626.patch
 Patch37: httpd-2.4.6-uds.patch
 Patch38: httpd-2.4.6-upn.patch
+Patch39: httpd-2.4.6-r1664565.patch
 # Bug fixes
 Patch51: httpd-2.4.3-sslsninotreq.patch
 Patch55: httpd-2.4.4-malformed-host.patch
@@ -107,6 +108,17 @@ Patch90: httpd-2.4.6-apachectl-status.patch
 Patch91: httpd-2.4.6-r1650655.patch
 Patch92: httpd-2.4.6-r1533448.patch
 Patch93: httpd-2.4.6-r1610013.patch
+Patch94: httpd-2.4.6-r1705528.patch
+Patch95: httpd-2.4.6-r1684462.patch
+Patch96: httpd-2.4.6-r1650677.patch
+Patch97: httpd-2.4.6-r1621601.patch
+Patch98: httpd-2.4.6-r1610396.patch
+Patch99: httpd-2.4.6-rotatelog-timezone.patch
+Patch100: httpd-2.4.6-ab-ssl-error.patch
+Patch101: httpd-2.4.6-r1723522.patch
+Patch102: httpd-2.4.6-r1681107.patch
+Patch103: httpd-2.4.6-dhparams-free.patch
+Patch104: httpd-2.4.6-r1651658.patch
 Patch105: httpd-2.4.6-r1560093.patch
 Patch106: httpd-2.4.6-r1748212.patch
 # Security fixes
@@ -249,6 +261,7 @@ rm modules/ssl/ssl_engine_dh.c
 %patch36 -p1 -b .r1573626
 %patch37 -p1 -b .uds
 %patch38 -p1 -b .upn
+%patch39 -p1 -b .r1664565
 
 %patch51 -p1 -b .sninotreq
 %patch55 -p1 -b .malformedhost
@@ -289,6 +302,17 @@ rm modules/ssl/ssl_engine_dh.c
 %patch91 -p1 -b .r1650655
 %patch92 -p1 -b .r1533448
 %patch93 -p1 -b .r1610013
+%patch94 -p1 -b .r1705528
+%patch95 -p1 -b .r1684462
+%patch96 -p1 -b .r1650677
+%patch97 -p1 -b .r1621601
+%patch98 -p1 -b .r1610396
+%patch99 -p1 -b .rotatelogtimezone
+%patch100 -p1 -b .absslerror
+%patch101 -p1 -b .r1723522
+%patch102 -p1 -b .r1681107
+%patch103 -p1 -b .dhparamsfree
+%patch104 -p1 -b .r1651658
 %patch105 -p1 -b .r1560093
 %patch106 -p1 -b .r1748212
 
@@ -567,7 +591,7 @@ fi
 %{_bindir}/openssl genrsa -rand /proc/apm:/proc/cpuinfo:/proc/dma:/proc/filesystems:/proc/interrupts:/proc/ioports:/proc/pci:/proc/rtc:/proc/uptime 1024 > %{sslkey} 2> /dev/null
 
 FQDN=`hostname`
-if [ "x${FQDN}" = "x" ]; then
+if [ "x${FQDN}" = "x" -o ${#FQDN} -gt 59 ]; then
    FQDN=localhost.localdomain
 fi
 
@@ -718,26 +742,46 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/rpm/macros.webconfig-httpd
 
 %changelog
-* Fri Aug 26 2016 ClearFoundation <developer@clearfoundation.com> - 2.4.6-40.clear.4
+* Mon Dec 12 2016 ClearFoundation <developer@clearfoundation.com> - 2.4.6-45.clear
 - create sandboxed web server
 
-* Mon Jul 18 2016 CentOS Sources <bugs@centos.org> - 2.4.6-40.el7.centos.4
+* Thu Nov 03 2016 CentOS Sources <bugs@centos.org> - 2.4.6-45.el7.centos
 - Remove index.html, add centos-noindex.tar.gz
 - change vstring
 - change symlink for poweredby.png
 - update welcome.conf with proper aliases
 
-* Tue Jul 12 2016 Joe Orton <jorton@redhat.com> - 2.4.6-40.4
+* Wed Aug 03 2016 Luboš Uhliarik <luhliari@redhat.com> - 2.4.6-45
+- RFE: run mod_rewrite external mapping program as non-root (#1316900)
+
+* Tue Jul 12 2016 Joe Orton <jorton@redhat.com> - 2.4.6-44
 - add security fix for CVE-2016-5387
 
-* Thu Jul  7 2016 Joe Orton <jorton@redhat.com> - 2.4.6-40.3
-- add 451 (Unavailable For Legal Reasons) response status-code (#1353269)
+* Tue Jul  5 2016 Joe Orton <jorton@redhat.com> - 2.4.6-43
+- add 451 (Unavailable For Legal Reasons) response status-code (#1343582)
 
-* Fri Jun 17 2016 Joe Orton <jorton@redhat.com> - 2.4.6-40.2
-- mod_cache: treat cache as valid with changed Expires in 304 (#1347648)
+* Fri Jun 17 2016 Joe Orton <jorton@redhat.com> - 2.4.6-42
+- mod_cache: treat cache as valid with changed Expires in 304 (#1331341)
 
-* Mon Mar 21 2016 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-40.1
-- fix apache user creation when apache group already exists (#1319001)
+* Wed Feb 24 2016 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-41
+- mod_cache: merge r->err_headers_out into r->headers when the response
+  is cached for the first time (#1264989)
+- mod_ssl: Do not send SSL warning when SNI hostname is not found as per
+  RFC 6066 (#1298148)
+- mod_proxy_fcgi: Ignore body data from backend for 304 responses (#1263038)
+- fix apache user creation when apache group already exists (#1299889)
+- fix apache user creation when USERGROUPS_ENAB is set to 'no' (#1288757)
+- mod_proxy: fix slow response time for reponses with error status code
+  when using ProxyErrorOverride (#1283653)
+- mod_ldap: Respect LDAPConnectionPoolTTL for authn connections (#1300149)
+- mod_ssl: use "localhost" in the dummy SSL cert for long FQDNs (#1240495)
+- rotatelogs: improve support for localtime (#1244545)
+- ab: fix read failure when targeting SSL server (#1255331)
+- mod_log_debug: fix LogMessage example in documentation (#1279465)
+- mod_authz_dbd, mod_authn_dbd, mod_session_dbd, mod_rewrite: Fix lifetime
+  of DB lookup entries independently of the selected DB engine (#1287844)
+- mod_ssl: fix hardware crypto support with custom DH parms (#1291865)
+- mod_proxy_fcgi: fix SCRIPT_FILENAME when a balancer is used (#1302797)
 
 * Thu Sep 17 2015 Jan Kaluza <jkaluza@redhat.com> - 2.4.6-40
 - mod_dav: follow up fix for previous commit (#1263975)
