@@ -1,31 +1,33 @@
 #!/bin/bash
 #
-# httpd        Startup script for the Apache HTTP Server
+# webconfig    Startup script for the Webconfig HTTP Server
 #
-# chkconfig: - 85 15
-# description: The Apache HTTP Server is an efficient and extensible  \
-#	       server implementing the current HTTP standards.
-# processname: httpd
-# config: /etc/httpd/conf/httpd.conf
-# config: /etc/sysconfig/httpd
-# pidfile: /var/run/httpd/httpd.pid
+# chkconfig: 2345 85 15
+# description: The Webconfig HTTP Server
+# processname: webconfig
+# config: /usr/clearos/sandbox/etc/httpd/conf/httpd.conf
+# config: /etc/sysconfig/webconfig
+# pidfile: /var/run/webconfig/webconfig.pid
 #
 ### BEGIN INIT INFO
-# Provides: httpd
+# Provides: webconfig
 # Required-Start: $local_fs $remote_fs $network $named
 # Required-Stop: $local_fs $remote_fs $network
-# Should-Start: distcache
-# Short-Description: start and stop Apache HTTP Server
-# Description: The Apache HTTP Server is an extensible server 
-#  implementing the current HTTP standards.
+# Short-Description: start and stop Webconfig HTTP Server
+# Description: The Webconfig HTTP Server
 ### END INIT INFO
 
 # Source function library.
 . /etc/rc.d/init.d/functions
 
-if [ -f /etc/sysconfig/httpd ]; then
-        . /etc/sysconfig/httpd
+if [ -f /etc/sysconfig/webconfig ]; then
+        . /etc/sysconfig/webconfig
 fi
+
+KEY="/usr/clearos/sandbox/etc/httpd/conf/server.key"
+CRT="/usr/clearos/sandbox/etc/httpd/conf/server.crt"
+HOST_CONF="/usr/clearos/sandbox/etc/httpd/conf.d/servername.conf"
+SSL_CONF="/usr/clearos/sandbox/etc/httpd/conf/openssl.cnf"
 
 # Start httpd in the C locale by default.
 HTTPD_LANG=${HTTPD_LANG-"C"}
@@ -39,13 +41,57 @@ INITLOG_ARGS=""
 # work correctly with a thread-based MPM; notably PHP will refuse to start.
 
 # Path to the apachectl script, server binary, and short-form for messages.
-apachectl=/usr/sbin/apachectl
-httpd=${HTTPD-/usr/sbin/httpd}
-prog=httpd
-pidfile=${PIDFILE-/var/run/httpd/httpd.pid}
-lockfile=${LOCKFILE-/var/lock/subsys/httpd}
+apachectl=/usr/clearos/sandbox/usr/sbin/apachectl
+httpd=${HTTPD-/usr/sbin/webconfig}
+prog=webconfig
+pidfile=${PIDFILE-/var/run/webconfig/webconfig.pid}
+lockfile=${LOCKFILE-/var/lock/subsys/webconfig}
 RETVAL=0
 STOP_TIMEOUT=${STOP_TIMEOUT-10}
+
+hostcheck() {
+        echo "ServerName $HOSTNAME" > $HOST_CONF
+}
+
+keygen() {
+        if [ ! -s "$KEY" ]; then
+                echo -n $"Generating webconfig SSL certificate: "
+
+                # Bail if no openssl.cnf file exists
+                if [ -e "$SSL_CONF" ]; then
+                        SSLCONF="$SSL_CONF"
+                else
+                        failure
+                        echo
+                        exit 1
+                fi
+
+                # Determine our hostname
+                umask 77
+                if [ -f /etc/sysconfig/network ]; then
+                        HOSTNAME=`grep "^HOSTNAME=" /etc/sysconfig/network | sed 's/HOSTNAME=//g' | sed 's/"//g'`
+                fi
+
+                if [ -z "$HOSTNAME" ]; then
+                        HOSTNAME="myserver.lan"
+                fi
+
+                sed -e "s/^CN .*/CN = $HOSTNAME/" $SSLCONF > /var/tmp/openssl.cnf.$$
+
+                # Generate keys
+                /usr/bin/openssl genrsa -out $KEY 1024 2>/dev/null
+                /usr/bin/openssl req -new -key $KEY -x509 -out $CRT -config /var/tmp/openssl.cnf.$$ \
+                        -days 3000 -set_serial `date "+%s"` 2>/dev/null
+
+                # Fix file permissions and ownership
+                chown webconfig.webconfig $KEY $CRT /var/tmp/openssl.cnf.$$
+                chmod 600 $KEY $CRT
+                rm -f /var/tmp/openssl.cnf.$$
+
+                success $"webconfig SSL certificate generated"
+                echo
+        fi
+}
 
 # The semantics of these two functions differ from the way apachectl does
 # things -- attempting to start while running is a failure, and shutdown
@@ -82,13 +128,13 @@ reload() {
     if ! LANG=$HTTPD_LANG $httpd $OPTIONS -t >&/dev/null; then
         RETVAL=6
         echo $"not reloading due to configuration syntax error"
-        failure $"not reloading $httpd due to configuration syntax error"
+        failure $"not reloading webconfig due to configuration syntax error"
     else
         # Force LSB behaviour from killproc
         LSB=1 killproc -p ${pidfile} $httpd -HUP
         RETVAL=$?
         if [ $RETVAL -eq 7 ]; then
-            failure $"httpd shutdown"
+            failure $"webconfig shutdown"
         fi
     fi
     echo
@@ -97,6 +143,8 @@ reload() {
 # See how we were called.
 case "$1" in
   start)
+	keygen
+	hostcheck
 	start
 	;;
   stop)
