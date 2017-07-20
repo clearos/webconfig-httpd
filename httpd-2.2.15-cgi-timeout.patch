@@ -1,0 +1,26 @@
+diff --git a/modules/generators/mod_cgi.c b/modules/generators/mod_cgi.c
+index f9980f9..f7c5942 100644
+--- a/modules/generators/mod_cgi.c
++++ b/modules/generators/mod_cgi.c
+@@ -839,7 +839,7 @@ static int cgi_handler(request_rec *r)
+         if (rv != APR_SUCCESS) {
+             ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r,
+                           "Error reading request entity data");
+-            return HTTP_INTERNAL_SERVER_ERROR;
++            return HTTP_REQUEST_TIME_OUT;
+         }
+ 
+         for (bucket = APR_BRIGADE_FIRST(bb);
+diff --git a/modules/generators/mod_cgid.c b/modules/generators/mod_cgid.c
+index 6f39ff6..ab40c67 100644
+--- a/modules/generators/mod_cgid.c
++++ b/modules/generators/mod_cgid.c
+@@ -1438,7 +1438,7 @@ static int cgid_handler(request_rec *r)
+         if (rv != APR_SUCCESS) {
+             ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r,
+                           "Error reading request entity data");
+-            return HTTP_INTERNAL_SERVER_ERROR;
++            return HTTP_REQUEST_TIME_OUT;
+         }
+ 
+         for (bucket = APR_BRIGADE_FIRST(bb);

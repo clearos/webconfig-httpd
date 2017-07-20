@@ -1,0 +1,17 @@
+--- a/modules/proxy/proxy_util.c 2015/05/23 08:19:04 1681288
++++ b/modules/proxy/proxy_util.c 2015/05/23 08:34:44 1681289
+@@ -2156,8 +2156,12 @@
+      * The scheme handler decides if this is permanent or
+      * short living pool.
+      */
+-    /* are we connecting directly, or via a proxy? */
+-    if (!proxyname) {
++    /* Unless we are connecting the backend via a (forward Proxy)Remote, we
++     * have to use the original form of the URI (non absolute), but this is
++     * also the case via a remote proxy using the CONNECT method since the
++     * original request (and URI) is to be embedded in the body.
++     */
++    if (!proxyname || conn->is_ssl) {
+         *url = apr_pstrcat(p, uri->path, uri->query ? "?" : "",
+                            uri->query ? uri->query : "",
+                            uri->fragment ? "#" : "",

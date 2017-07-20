@@ -1,0 +1,14 @@
+--- modules/aaa/mod_authz_host.c  (revision 1768506)
++++ modules/aaa/mod_authz_host.c  (working copy)
+@@ -120,6 +120,11 @@ 
+     if (strcasecmp(from, "from"))
+         return "allow and deny must be followed by 'from'";
+ 
++    s = ap_strchr(where, '#');
++    if (s) {
++        *s = '\0';
++    }
++    
+     a = (allowdeny *) apr_array_push(cmd->info ? d->allows : d->denys);
+     a->x.from = where;
+     a->limited = cmd->limited;

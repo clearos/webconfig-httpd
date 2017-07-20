@@ -1,0 +1,11 @@
+--- a/modules/ssl/ssl_engine_kernel.c	2013/02/15 15:42:09	1446636
++++ b/modules/ssl/ssl_engine_kernel.c	2013/02/15 15:42:12	1446637
+@@ -1588,7 +1588,7 @@
+             ASN1_INTEGER *sn = X509_REVOKED_get_serialNumber(revoked);
+ 
+             if (!ASN1_INTEGER_cmp(sn, X509_get_serialNumber(cert))) {
+-                if (s->loglevel >= APLOG_DEBUG) {
++                if (s->loglevel >= APLOG_INFO) {
+                     char *cp = X509_NAME_oneline(issuer, NULL, 0);
+                     long serial = ASN1_INTEGER_get(sn);
+ 

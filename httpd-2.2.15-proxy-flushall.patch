@@ -1,0 +1,197 @@
+diff --git a/modules/proxy/mod_proxy_http.c b/modules/proxy/mod_proxy_http.c
+index be31635..28254ee 100644
+--- a/modules/proxy/mod_proxy_http.c
++++ b/modules/proxy/mod_proxy_http.c
+@@ -289,7 +289,8 @@ static int stream_reqbody_chunked(apr_pool_t *p,
+                                            proxy_conn_rec *p_conn,
+                                            conn_rec *origin,
+                                            apr_bucket_brigade *header_brigade,
+-                                           apr_bucket_brigade *input_brigade)
++                                           apr_bucket_brigade *input_brigade,
++                                           int flushall)
+ {
+     int seen_eos = 0, rv = OK;
+     apr_size_t hdr_len;
+@@ -305,11 +306,15 @@ static int stream_reqbody_chunked(apr_pool_t *p,
+     while (!APR_BUCKET_IS_EOS(APR_BRIGADE_FIRST(input_brigade)))
+     {
+         char chunk_hdr[20];  /* must be here due to transient bucket. */
++        int flush = flushall;
+ 
+         /* If this brigade contains EOS, either stop or remove it. */
+         if (APR_BUCKET_IS_EOS(APR_BRIGADE_LAST(input_brigade))) {
+             seen_eos = 1;
+ 
++            /* The request is flushed below this loop with the EOS chunk */
++            flush = 0;
++
+             /* We can't pass this EOS to the output_filters. */
+             e = APR_BRIGADE_LAST(input_brigade);
+             apr_bucket_delete(e);
+@@ -338,6 +343,12 @@ static int stream_reqbody_chunked(apr_pool_t *p,
+              */
+             bb = header_brigade;
+ 
++            /* Flush now since we have the header and (enough of) the prefeched
++             * body already, unless we are EOS since everything is to be
++             * flushed below this loop with the EOS chunk.
++             */
++            flush = !seen_eos;
++
+             /*
+              * Save input_brigade in bb brigade. (At least) in the SSL case
+              * input_brigade contains transient buckets whose data would get
+@@ -359,7 +370,7 @@ static int stream_reqbody_chunked(apr_pool_t *p,
+         }
+ 
+         /* The request is flushed below this loop with chunk EOS header */
+-        rv = pass_brigade(bucket_alloc, r, p_conn, origin, bb, 0);
++        rv = pass_brigade(bucket_alloc, r, p_conn, origin, bb, flush);
+         if (rv != OK) {
+             return rv;
+         }
+@@ -410,7 +421,8 @@ static int stream_reqbody_cl(apr_pool_t *p,
+                                       conn_rec *origin,
+                                       apr_bucket_brigade *header_brigade,
+                                       apr_bucket_brigade *input_brigade,
+-                                      const char *old_cl_val)
++                                      const char *old_cl_val,
++                                      int flushall)
+ {
+     int seen_eos = 0, rv = 0;
+     apr_status_t status = APR_SUCCESS;
+@@ -438,6 +450,7 @@ static int stream_reqbody_cl(apr_pool_t *p,
+ 
+     while (!APR_BUCKET_IS_EOS(APR_BRIGADE_FIRST(input_brigade)))
+     {
++        int flush = flushall;
+         apr_brigade_length(input_brigade, 1, &bytes);
+         bytes_streamed += bytes;
+ 
+@@ -445,6 +458,9 @@ static int stream_reqbody_cl(apr_pool_t *p,
+         if (APR_BUCKET_IS_EOS(APR_BRIGADE_LAST(input_brigade))) {
+             seen_eos = 1;
+ 
++            /* Once we hit EOS, we are ready to flush. */
++            flush = 1;
++
+             /* We can't pass this EOS to the output_filters. */
+             e = APR_BRIGADE_LAST(input_brigade);
+             apr_bucket_delete(e);
+@@ -473,6 +489,11 @@ static int stream_reqbody_cl(apr_pool_t *p,
+              */
+             bb = header_brigade;
+ 
++            /* Flush now since we have the header and (enough of) the prefeched
++             * body already.
++             */
++            flush = 1;
++
+             /*
+              * Save input_brigade in bb brigade. (At least) in the SSL case
+              * input_brigade contains transient buckets whose data would get
+@@ -494,7 +515,7 @@ static int stream_reqbody_cl(apr_pool_t *p,
+         }
+ 
+         /* Once we hit EOS, we are ready to flush. */
+-        rv = pass_brigade(bucket_alloc, r, p_conn, origin, bb, seen_eos);
++        rv = pass_brigade(bucket_alloc, r, p_conn, origin, bb, flush);
+         if (rv != OK) {
+             return rv ;
+         }
+@@ -679,7 +700,7 @@ int ap_proxy_http_request(apr_pool_t *p, request_rec *r,
+                                    proxy_conn_rec *p_conn, conn_rec *origin,
+                                    proxy_server_conf *conf,
+                                    apr_uri_t *uri,
+-                                   char *url, char *server_portstr)
++                                   char *url, char *server_portstr, int flushall)
+ {
+     conn_rec *c = r->connection;
+     apr_bucket_alloc_t *bucket_alloc = c->bucket_alloc;
+@@ -700,6 +721,7 @@ int ap_proxy_http_request(apr_pool_t *p, request_rec *r,
+     apr_off_t bytes;
+     int force10, rv;
+     apr_table_t *headers_in_copy;
++    apr_read_type_e block;
+ 
+     header_brigade = apr_brigade_create(p, bucket_alloc);
+ 
+@@ -724,7 +746,9 @@ int ap_proxy_http_request(apr_pool_t *p, request_rec *r,
+         force10 = 0;
+     }
+     if (apr_table_get(r->subprocess_env, "proxy-nokeepalive")) {
+-        origin->keepalive = AP_CONN_CLOSE;
++        if (origin) {
++            origin->keepalive = AP_CONN_CLOSE;
++        }
+         p_conn->close++;
+     }
+     ap_xlate_proto_to_ascii(buf, strlen(buf));
+@@ -980,10 +1004,19 @@ int ap_proxy_http_request(apr_pool_t *p, request_rec *r,
+      * reasonable size.
+      */
+     temp_brigade = apr_brigade_create(p, bucket_alloc);
++    block = (flushall) ? APR_NONBLOCK_READ : APR_BLOCK_READ;
+     do {
+         status = ap_get_brigade(r->input_filters, temp_brigade,
+-                                AP_MODE_READBYTES, APR_BLOCK_READ,
++                                AP_MODE_READBYTES, block,
+                                 MAX_MEM_SPOOL - bytes_read);
++        /* ap_get_brigade may return success with an empty brigade
++         * for a non-blocking read which would block
++         */
++        if (block == APR_NONBLOCK_READ
++            && ((status == APR_SUCCESS && APR_BRIGADE_EMPTY(temp_brigade))
++                || APR_STATUS_IS_EAGAIN(status))) {
++            break;
++        }
+         if (status != APR_SUCCESS) {
+             ap_log_error(APLOG_MARK, APLOG_ERR, status, r->server,
+                          "proxy: prefetch request body failed to %pI (%s)"
+@@ -1021,7 +1054,8 @@ int ap_proxy_http_request(apr_pool_t *p, request_rec *r,
+      * (an arbitrary value.)
+      */
+     } while ((bytes_read < MAX_MEM_SPOOL - 80)
+-              && !APR_BUCKET_IS_EOS(APR_BRIGADE_LAST(input_brigade)));
++              && !APR_BUCKET_IS_EOS(APR_BRIGADE_LAST(input_brigade))
++              && block == APR_BLOCK_READ);
+ 
+     /* Use chunked request body encoding or send a content-length body?
+      *
+@@ -1127,11 +1161,11 @@ skip_body:
+     switch(rb_method) {
+     case RB_STREAM_CHUNKED:
+         rv = stream_reqbody_chunked(p, r, p_conn, origin, header_brigade,
+-                                        input_brigade);
++                                        input_brigade, flushall);
+         break;
+     case RB_STREAM_CL:
+         rv = stream_reqbody_cl(p, r, p_conn, origin, header_brigade,
+-                                   input_brigade, old_cl_val);
++                                   input_brigade, old_cl_val, flushall);
+         break;
+     case RB_SPOOL_CL:
+         rv = spool_reqbody_cl(p, r, p_conn, origin, header_brigade,
+@@ -1941,6 +1975,7 @@ static int proxy_http_handler(request_rec *r, proxy_worker *worker,
+     proxy_conn_rec *backend = NULL;
+     int is_ssl = 0;
+     conn_rec *c = r->connection;
++    int flushall = 0;
+     /*
+      * Use a shorter-lived pool to reduce memory usage
+      * and avoid a memory leak
+@@ -2036,9 +2071,13 @@ static int proxy_http_handler(request_rec *r, proxy_worker *worker,
+         }
+     }
+ 
++    if (apr_table_get(r->subprocess_env, "proxy-flushall")) {
++        flushall = 1;
++    }
++
+     /* Step Four: Send the Request */
+     if ((status = ap_proxy_http_request(p, r, backend, backend->connection,
+-                                        conf, uri, url, server_portstr)) != OK)
++                                        conf, uri, url, server_portstr, flushall)) != OK)
+         goto cleanup;
+ 
+     /* Step Five: Receive the Response */

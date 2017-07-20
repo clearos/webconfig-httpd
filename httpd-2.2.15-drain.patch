@@ -1,0 +1,119 @@
+diff --git a/modules/proxy/mod_proxy.c b/modules/proxy/mod_proxy.c
+index a52b2b1..e42e50d 100644
+--- a/modules/proxy/mod_proxy.c
++++ b/modules/proxy/mod_proxy.c
+@@ -238,6 +238,12 @@ static const char *set_worker_param(apr_pool_t *p,
+                 else
+                     worker->status &= ~PROXY_WORKER_IGNORE_ERRORS;
+             }
++            else if (*v == 'N' || *v == 'n') {
++                if (mode)
++                    worker->status |= PROXY_WORKER_DRAIN;
++                else
++                    worker->status &= ~PROXY_WORKER_DRAIN;
++            }
+             else {
+                 return "Unknown status parameter option";
+             }
+diff --git a/modules/proxy/mod_proxy.h b/modules/proxy/mod_proxy.h
+index 2081cae..d59b252 100644
+--- a/modules/proxy/mod_proxy.h
++++ b/modules/proxy/mod_proxy.h
+@@ -268,6 +268,7 @@ struct proxy_conn_pool {
+ /* worker status flags */
+ #define PROXY_WORKER_INITIALIZED    0x0001
+ #define PROXY_WORKER_IGNORE_ERRORS  0x0002
++#define PROXY_WORKER_DRAIN          0x0004
+ #define PROXY_WORKER_IN_SHUTDOWN    0x0010
+ #define PROXY_WORKER_DISABLED       0x0020
+ #define PROXY_WORKER_STOPPED        0x0040
+@@ -283,6 +284,7 @@ struct proxy_conn_pool {
+ #define PROXY_WORKER_IN_ERROR_FLAG       'E'
+ #define PROXY_WORKER_HOT_STANDBY_FLAG    'H'
+ #define PROXY_WORKER_FREE_FLAG           'F'
++#define PROXY_WORKER_DRAIN_FLAG          'N'
+ 
+ #define PROXY_WORKER_NOT_USABLE_BITMAP ( PROXY_WORKER_IN_SHUTDOWN | \
+ PROXY_WORKER_DISABLED | PROXY_WORKER_STOPPED | PROXY_WORKER_IN_ERROR )
+@@ -298,6 +300,8 @@ PROXY_WORKER_DISABLED | PROXY_WORKER_STOPPED | PROXY_WORKER_IN_ERROR )
+   ( !( (f)->s->status & PROXY_WORKER_NOT_USABLE_BITMAP) ) && \
+   PROXY_WORKER_IS_INITIALIZED(f) )
+ 
++#define PROXY_WORKER_IS_DRAINING(f)   ( (f)->s->status &  PROXY_WORKER_DRAIN )
++
+ /* default worker retry timeout in seconds */
+ #define PROXY_WORKER_DEFAULT_RETRY  60
+ #define PROXY_WORKER_MAX_ROUTE_SIZ  63
+diff --git a/modules/proxy/mod_proxy_balancer.c b/modules/proxy/mod_proxy_balancer.c
+index b04d5ab..9626dfb 100644
+--- a/modules/proxy/mod_proxy_balancer.c
++++ b/modules/proxy/mod_proxy_balancer.c
+@@ -925,10 +925,11 @@ static int balancer_handler(request_rec *r)
+                       NULL);
+             ap_rputs("\"></td></tr>\n", r);
+             ap_rputs("<tr><td>Status:</td>", r);
+-            ap_rputs("<td><table border='1'><tr><th>Ign</th><th>Dis</th><th>Stby</th></tr>\n<tr>", r);
++            ap_rputs("<td><table border='1'><tr><th>Ign</th><th>Dis</th><th>Stby</th><th>Drn</th></tr>\n<tr>", r);
+             create_radio("status_I", PROXY_WORKER_IGNORE_ERRORS, wsel, r);
+             create_radio("status_D", PROXY_WORKER_DISABLED, wsel, r);
+             create_radio("status_H", PROXY_WORKER_HOT_STANDBY, wsel, r);
++            create_radio("status_N", PROXY_WORKER_DRAIN, wsel, r);
+             ap_rputs("</tr></table>\n", r);
+             ap_rputs("<tr><td colspan=2><input type=submit value='Submit'></td></tr>\n", r);
+             ap_rvputs(r, "</table>\n<input type=hidden name='w' ",  NULL);
+@@ -1041,7 +1042,8 @@ static proxy_worker *find_best_byrequests(proxy_balancer *balancer,
+                 }
+                 if (worker->s->lbset != cur_lbset)
+                     continue;
+-                if ( (checking_standby ? !PROXY_WORKER_IS_STANDBY(worker) : PROXY_WORKER_IS_STANDBY(worker)) )
++                if ( (checking_standby ? !PROXY_WORKER_IS_STANDBY(worker) : PROXY_WORKER_IS_STANDBY(worker)) ||
++                    (PROXY_WORKER_IS_DRAINING(worker)) )
+                     continue;
+                 /* If the worker is in error state run
+                  * retry on that worker. It will be marked as
+@@ -1123,7 +1125,8 @@ static proxy_worker *find_best_bytraffic(proxy_balancer *balancer,
+                 }
+                 if (worker->s->lbset != cur_lbset)
+                     continue;
+-                if ( (checking_standby ? !PROXY_WORKER_IS_STANDBY(worker) : PROXY_WORKER_IS_STANDBY(worker)) )
++                if ( (checking_standby ? !PROXY_WORKER_IS_STANDBY(worker) : PROXY_WORKER_IS_STANDBY(worker)) ||
++                    (PROXY_WORKER_IS_DRAINING(worker)) )
+                     continue;
+                 /* If the worker is in error state run
+                  * retry on that worker. It will be marked as
+@@ -1194,7 +1197,8 @@ static proxy_worker *find_best_bybusyness(proxy_balancer *balancer,
+                 if (worker->s->lbset != cur_lbset)
+                     continue;
+ 
+-                if ( (checking_standby ? !PROXY_WORKER_IS_STANDBY(worker) : PROXY_WORKER_IS_STANDBY(worker)) )
++                if ( (checking_standby ? !PROXY_WORKER_IS_STANDBY(worker) : PROXY_WORKER_IS_STANDBY(worker)) ||
++                    (PROXY_WORKER_IS_DRAINING(worker)) )
+                     continue;
+ 
+                 /* If the worker is in error state run
+diff --git a/modules/proxy/proxy_util.c b/modules/proxy/proxy_util.c
+index 11dab04..15e82f1 100644
+--- a/modules/proxy/proxy_util.c
++++ b/modules/proxy/proxy_util.c
+@@ -2797,6 +2797,12 @@ PROXY_DECLARE(apr_status_t) ap_proxy_set_wstatus(const char c, int set, proxy_wo
+             else
+                 w->s->status &= ~PROXY_WORKER_IGNORE_ERRORS;
+             break;
++        case PROXY_WORKER_DRAIN_FLAG :
++            if (set)
++                w->s->status |= PROXY_WORKER_DRAIN;
++            else
++                w->s->status &= ~PROXY_WORKER_DRAIN;
++            break;
+         default:
+             return APR_EINVAL;
+             break;
+@@ -2824,6 +2830,8 @@ PROXY_DECLARE(char *) ap_proxy_parse_wstatus(apr_pool_t *p, proxy_worker *w)
+         ret = apr_pstrcat(p, ret, "Err ", NULL);
+     if (status & PROXY_WORKER_HOT_STANDBY)
+         ret = apr_pstrcat(p, ret, "Stby ", NULL);
++    if (status & PROXY_WORKER_DRAIN)
++        ret = apr_pstrcat(p, ret, "Drn ", NULL);
+     if (PROXY_WORKER_IS_USABLE(w))
+         ret = apr_pstrcat(p, ret, "Ok ", NULL);
+     return ret;

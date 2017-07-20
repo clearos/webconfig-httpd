@@ -1,0 +1,13 @@
+--- a/modules/ssl/ssl_engine_init.c	2014/07/16 05:28:08	1610913
++++ b/modules/ssl/ssl_engine_init.c	2014/07/16 06:04:38	1610914
+@@ -1264,6 +1264,10 @@
+     ssl_init_ctx(s, p, ptemp, sc->server);
+ 
+     ssl_init_server_certs(s, p, ptemp, sc->server);
++
++    SSL_CTX_set_timeout(sc->server->ssl_ctx,
++                        sc->session_cache_timeout == UNSET ?
++                        SSL_SESSION_CACHE_TIMEOUT : sc->session_cache_timeout);
+ }
+ 
+ /*

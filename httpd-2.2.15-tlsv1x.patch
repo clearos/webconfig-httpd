@@ -1,0 +1,232 @@
+http://svn.apache.org/viewvc?view=revision&revision=r1375076
+
+diff --git a/modules/ssl/mod_ssl.c b/modules/ssl/mod_ssl.c
+index a29c472..0424c6a 100644
+--- a/modules/ssl/mod_ssl.c
++++ b/modules/ssl/mod_ssl.c
+@@ -138,9 +138,19 @@ static const command_rec ssl_config_cmds[] = {
+     SSL_CMD_SRV(SessionCacheTimeout, TAKE1,
+                 "SSL Session Cache object lifetime "
+                 "(`N' - number of seconds)")
++#ifdef OPENSSL_NO_SSL2
++#define SSLv2_PROTO_PREFIX ""
++#else
++#define SSLv2_PROTO_PREFIX "SSLv2|"
++#endif
++#ifdef HAVE_TLSV1_X
++#define SSL_PROTOCOLS SSLv2_PROTO_PREFIX "SSLv3|TLSv1|TLSv1.1|TLSv1.2"
++#else
++#define SSL_PROTOCOLS SSLv2_PROTO_PREFIX "SSLv3|TLSv1"
++#endif
+     SSL_CMD_SRV(Protocol, RAW_ARGS,
+-                "Enable or disable various SSL protocols"
+-                "(`[+-][SSLv2|SSLv3|TLSv1] ...' - see manual)")
++                "Enable or disable various SSL protocols "
++                "('[+-][" SSL_PROTOCOLS "] ...' - see manual)")
+     SSL_CMD_SRV(HonorCipherOrder, FLAG,
+                 "Use the server's cipher ordering preference")
+     SSL_CMD_SRV(InsecureRenegotiation, FLAG,
+@@ -157,8 +167,8 @@ static const command_rec ssl_config_cmds[] = {
+                 "SSL switch for the proxy protocol engine "
+                 "(`on', `off')")
+     SSL_CMD_SRV(ProxyProtocol, RAW_ARGS,
+-               "SSL Proxy: enable or disable SSL protocol flavors "
+-               "(`[+-][SSLv2|SSLv3|TLSv1] ...' - see manual)")
++                "SSL Proxy: enable or disable SSL protocol flavors "
++                "('[+-][" SSL_PROTOCOLS "] ...' - see manual)")
+     SSL_CMD_SRV(ProxyCipherSuite, TAKE1,
+                "SSL Proxy: colon-delimited list of permitted SSL ciphers "
+                "(`XXX:...:XXX' - see manual)")
+diff --git a/modules/ssl/ssl_engine_config.c b/modules/ssl/ssl_engine_config.c
+index 13b6a3f..a0247e6 100644
+--- a/modules/ssl/ssl_engine_config.c
++++ b/modules/ssl/ssl_engine_config.c
+@@ -1250,6 +1250,14 @@ static const char *ssl_cmd_protocol_parse(cmd_parms *parms,
+         else if (strcEQ(w, "TLSv1")) {
+             thisopt = SSL_PROTOCOL_TLSV1;
+         }
++#ifdef HAVE_TLSV1_X
++        else if (strcEQ(w, "TLSv1.1")) {
++            thisopt = SSL_PROTOCOL_TLSV1_1;
++        }
++        else if (strcEQ(w, "TLSv1.2")) {
++            thisopt = SSL_PROTOCOL_TLSV1_2;
++        }
++#endif
+         else if (strcEQ(w, "all")) {
+             thisopt = SSL_PROTOCOL_ALL;
+         }
+diff --git a/modules/ssl/ssl_engine_init.c b/modules/ssl/ssl_engine_init.c
+index f52c19b..3969851 100644
+--- a/modules/ssl/ssl_engine_init.c
++++ b/modules/ssl/ssl_engine_init.c
+@@ -34,7 +34,6 @@
+ **  _________________________________________________________________
+ */
+ 
+-
+ static void ssl_add_version_components(apr_pool_t *p,
+                                        server_rec *s)
+ {
+@@ -323,9 +322,15 @@ static void ssl_init_ctx_protocol(server_rec *s,
+     }
+ 
+     cp = apr_pstrcat(p,
++#ifndef OPENSSL_NO_SSL2
+                      (protocol & SSL_PROTOCOL_SSLV2 ? "SSLv2, " : ""),
++#endif
+                      (protocol & SSL_PROTOCOL_SSLV3 ? "SSLv3, " : ""),
+                      (protocol & SSL_PROTOCOL_TLSV1 ? "TLSv1, " : ""),
++#ifdef HAVE_TLSV1_X
++                     (protocol & SSL_PROTOCOL_TLSV1_1 ? "TLSv1.1, " : ""),
++                     (protocol & SSL_PROTOCOL_TLSV1_2 ? "TLSv1.2, " : ""),
++#endif
+                      NULL);
+     cp[strlen(cp)-2] = NUL;
+ 
+@@ -336,14 +341,27 @@ static void ssl_init_ctx_protocol(server_rec *s,
+         method = mctx->pkp ?
+             SSLv2_client_method() : /* proxy */
+             SSLv2_server_method();  /* server */
+-        ctx = SSL_CTX_new(method);  /* only SSLv2 is left */
+     }
+-    else {
++    else
++#ifdef HAVE_TLSV1_X
++    if (protocol == SSL_PROTOCOL_TLSV1_1) {
++        method = mctx->pkp ?
++            TLSv1_1_client_method() : /* proxy */
++            TLSv1_1_server_method();  /* server */
++    }
++    else if (protocol == SSL_PROTOCOL_TLSV1_2) {
++        method = mctx->pkp ?
++            TLSv1_2_client_method() : /* proxy */
++            TLSv1_2_server_method();  /* server */
++    }
++    else
++#endif
++    {
+         method = mctx->pkp ?
+             SSLv23_client_method() : /* proxy */
+             SSLv23_server_method();  /* server */
+-        ctx = SSL_CTX_new(method); /* be more flexible */
+     }
++    ctx = SSL_CTX_new(method);
+ 
+     mctx->ssl_ctx = ctx;
+ 
+@@ -361,6 +379,16 @@ static void ssl_init_ctx_protocol(server_rec *s,
+         SSL_CTX_set_options(ctx, SSL_OP_NO_TLSv1);
+     }
+ 
++#ifdef HAVE_TLSV1_X
++    if (!(protocol & SSL_PROTOCOL_TLSV1_1)) {
++        SSL_CTX_set_options(ctx, SSL_OP_NO_TLSv1_1);
++    }
++
++    if (!(protocol & SSL_PROTOCOL_TLSV1_2)) {
++        SSL_CTX_set_options(ctx, SSL_OP_NO_TLSv1_2);
++    }
++#endif
++
+ #ifdef SSL_OP_CIPHER_SERVER_PREFERENCE
+     if (sc->cipher_server_pref == TRUE) {
+         SSL_CTX_set_options(ctx, SSL_OP_CIPHER_SERVER_PREFERENCE);
+@@ -1073,21 +1101,17 @@ void ssl_init_CheckServers(SSLModConfigRec *mc, server_rec *base_server, apr_poo
+         klen = strlen(key);
+ 
+         if ((ps = (server_rec *)apr_hash_get(table, key, klen))) {
+-            ap_log_error(APLOG_MARK, 
+ #ifdef OPENSSL_NO_TLSEXT
+-                         APLOG_WARNING, 
++            int level = APLOG_WARNING;
++            const char *problem = "conflict";
+ #else
+-                         APLOG_DEBUG, 
+-#endif
+-                         0,
+-                         base_server,
+-#ifdef OPENSSL_NO_TLSEXT
+-                         "Init: SSL server IP/port conflict: "
+-#else
+-                         "Init: SSL server IP/port overlap: "
++            int level = APLOG_DEBUG;
++            const char *problem = "overlap";
+ #endif
++            ap_log_error(APLOG_MARK, level, 0, base_server,
++                         "Init: SSL server IP/port %s: "
+                          "%s (%s:%d) vs. %s (%s:%d)",
+-                         ssl_util_vhostid(p, s),
++                         problem, ssl_util_vhostid(p, s),
+                          (s->defn_name ? s->defn_name : "unknown"),
+                          s->defn_line_number,
+                          ssl_util_vhostid(p, ps),
+diff --git a/modules/ssl/ssl_engine_kernel.c b/modules/ssl/ssl_engine_kernel.c
+index abc552d..1f6c675 100644
+--- a/modules/ssl/ssl_engine_kernel.c
++++ b/modules/ssl/ssl_engine_kernel.c
+@@ -743,6 +743,7 @@ int ssl_hook_Access(request_rec *r)
+             }
+         }
+         else {
++            const char *reneg_support;
+             request_rec *id = r->main ? r->main : r;
+ 
+             /* Additional mitigation for CVE-2009-3555: At this point,
+@@ -762,17 +763,17 @@ int ssl_hook_Access(request_rec *r)
+                 r->connection->keepalive = AP_CONN_CLOSE;
+             }
+ 
++#if defined(SSL_get_secure_renegotiation_support)
++            reneg_support = SSL_get_secure_renegotiation_support(ssl) ?
++                            "client does" : "client does not";
++#else
++            reneg_support = "server does not";
++#endif
+             /* Perform a full renegotiation. */
+             ap_log_rerror(APLOG_MARK, APLOG_DEBUG, 0, r,
+                           "Performing full renegotiation: complete handshake "
+                           "protocol (%s support secure renegotiation)",
+-#if defined(SSL_get_secure_renegotiation_support)
+-                          SSL_get_secure_renegotiation_support(ssl) ? 
+-                          "client does" : "client does not"
+-#else
+-                          "server does not"
+-#endif
+-                );
++                          reneg_support);
+ 
+             SSL_set_session_id_context(ssl,
+                                        (unsigned char *)&id,
+diff --git a/modules/ssl/ssl_private.h b/modules/ssl/ssl_private.h
+index 4a4d7d2..3c46a3a 100644
+--- a/modules/ssl/ssl_private.h
++++ b/modules/ssl/ssl_private.h
+@@ -59,6 +59,11 @@
+ /** mod_ssl headers */
+ #include "ssl_toolkit_compat.h"
+ #include "ssl_expr.h"
++
++#ifdef SSL_OP_NO_TLSv1_2
++#define HAVE_TLSV1_X
++#endif
++
+ #include "ssl_util_ssl.h"
+ 
+ /** The #ifdef macros are only defined AFTER including the above
+@@ -217,7 +222,14 @@ typedef int ssl_opt_t;
+ #define SSL_PROTOCOL_SSLV2 (1<<0)
+ #define SSL_PROTOCOL_SSLV3 (1<<1)
+ #define SSL_PROTOCOL_TLSV1 (1<<2)
+-#define SSL_PROTOCOL_ALL   (SSL_PROTOCOL_SSLV2|SSL_PROTOCOL_SSLV3|SSL_PROTOCOL_TLSV1)
++#define SSL_MOST_ALL SSL_PROTOCOL_SSLV2|SSL_PROTOCOL_SSLV3|SSL_PROTOCOL_TLSV1
++#ifdef HAVE_TLSV1_X
++#define SSL_PROTOCOL_TLSV1_1 (1<<3)
++#define SSL_PROTOCOL_TLSV1_2 (1<<4)
++#define SSL_PROTOCOL_ALL (SSL_MOST_ALL|SSL_PROTOCOL_TLSV1_1|SSL_PROTOCOL_TLSV1_2)
++#else
++#define SSL_PROTOCOL_ALL (SSL_MOST_ALL)
++#endif
+ typedef int ssl_proto_t;
+ 
+ /**

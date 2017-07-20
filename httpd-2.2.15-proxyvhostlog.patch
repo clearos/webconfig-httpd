@@ -1,0 +1,13 @@
+diff --git a/modules/proxy/mod_proxy_http.c b/modules/proxy/mod_proxy_http.c
+index 43904ee..50ec127 100644
+--- a/modules/proxy/mod_proxy_http.c
++++ b/modules/proxy/mod_proxy_http.c
+@@ -1796,7 +1796,7 @@ apr_status_t ap_proxy_http_process_response(apr_pool_t * p, request_rec *r,
+                          * our backend bailed on us. Pass along a 502 error
+                          * error bucket
+                          */
+-                        ap_log_cerror(APLOG_MARK, APLOG_ERR, rv, c,
++                        ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r,
+                                       "proxy: error reading response");
+                         ap_proxy_backend_broke(r, bb);
+                         ap_pass_brigade(r->output_filters, bb);

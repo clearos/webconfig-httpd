@@ -1,0 +1,10 @@
+--- a/modules/proxy/mod_proxy_connect.c	2013/02/04 19:55:28	1442319
++++ b/modules/proxy/mod_proxy_connect.c	2013/02/04 19:56:39	1442320
+@@ -487,6 +487,7 @@
+     ap_lingering_close(backconn);
+ 
+     c->aborted = 1;
++    c->keepalive = AP_CONN_CLOSE;
+ 
+     return OK;
+ }

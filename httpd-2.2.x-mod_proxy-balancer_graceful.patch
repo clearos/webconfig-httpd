@@ -1,0 +1,229 @@
+diff --git a/modules/proxy/mod_proxy.h b/modules/proxy/mod_proxy.h
+index b77ecb3..2081cae 100644
+--- a/modules/proxy/mod_proxy.h
++++ b/modules/proxy/mod_proxy.h
+@@ -302,6 +302,13 @@ PROXY_WORKER_DISABLED | PROXY_WORKER_STOPPED | PROXY_WORKER_IN_ERROR )
+ #define PROXY_WORKER_DEFAULT_RETRY  60
+ #define PROXY_WORKER_MAX_ROUTE_SIZ  63
+ 
++/* Scoreboard */
++#if MODULE_MAGIC_NUMBER_MAJOR > 20020903
++#define PROXY_HAS_SCOREBOARD 1
++#else
++#define PROXY_HAS_SCOREBOARD 0
++#endif
++
+ /* Runtime worker status informations. Shared in scoreboard */
+ typedef struct {
+     int             status;
+@@ -317,6 +324,9 @@ typedef struct {
+     void            *context;   /* general purpose storage */
+     apr_size_t      busy;       /* busyness factor */
+     int             lbset;      /* load balancer cluster set */
++#if PROXY_HAS_SCOREBOARD
++    unsigned char   digest[APR_MD5_DIGESTSIZE]; /* hash of the worker->name */
++#endif
+ } proxy_worker_stat;
+ 
+ /* Worker configuration */
+@@ -768,13 +778,6 @@ PROXY_DECLARE(int) ap_proxy_connection_create(const char *proxy_function,
+ PROXY_DECLARE(void) ap_proxy_backend_broke(request_rec *r,
+                                            apr_bucket_brigade *brigade);
+ 
+-/* Scoreboard */
+-#if MODULE_MAGIC_NUMBER_MAJOR > 20020903
+-#define PROXY_HAS_SCOREBOARD 1
+-#else
+-#define PROXY_HAS_SCOREBOARD 0
+-#endif
+-
+ /**
+  * Transform buckets from one bucket allocator to another one by creating a
+  * transient bucket for each data bucket and let it use the data read from
+@@ -815,6 +818,12 @@ PROXY_DECLARE(apr_status_t) ap_proxy_set_wstatus(char c, int set, proxy_worker *
+  */
+ PROXY_DECLARE(char *) ap_proxy_parse_wstatus(apr_pool_t *p, proxy_worker *w);
+ 
++#if PROXY_HAS_SCOREBOARD
++void *ap_proxy_set_scoreboard_lb(proxy_worker *worker,
++                                 proxy_balancer *balancer,
++                                 server_rec *server);
++#endif
++
+ #define PROXY_LBMETHOD "proxylbmethod"
+ 
+ /* The number of dynamic workers that can be added when reconfiguring.
+diff --git a/modules/proxy/mod_proxy_balancer.c b/modules/proxy/mod_proxy_balancer.c
+index 5306e8d..6d7314e 100644
+--- a/modules/proxy/mod_proxy_balancer.c
++++ b/modules/proxy/mod_proxy_balancer.c
+@@ -83,25 +83,23 @@ static int init_balancer_members(proxy_server_conf *conf, server_rec *s,
+     int i;
+     proxy_worker *workers;
+     int worker_is_initialized;
+-    proxy_worker_stat *slot;
+ 
+     workers = (proxy_worker *)balancer->workers->elts;
+ 
+     for (i = 0; i < balancer->workers->nelts; i++) {
+         worker_is_initialized = PROXY_WORKER_IS_INITIALIZED(workers);
++#if PROXY_HAS_SCOREBOARD
++        /*
++         * If the worker is not initialized but has a scoreboard
++         * slot, check whether it was already initialized in a
++         * previous generation to avoid resetting the shared lb
++         * parameters below.
++         */
+         if (!worker_is_initialized) {
+-            /*
+-             * If the worker is not initialized check whether its scoreboard
+-             * slot is already initialized.
+-             */
+-            slot = (proxy_worker_stat *) ap_get_scoreboard_lb(workers->id);
+-            if (slot) {
+-                worker_is_initialized = slot->status & PROXY_WORKER_INITIALIZED;
+-            }
+-            else {
+-                worker_is_initialized = 0;
+-            }
++            ap_proxy_set_scoreboard_lb(workers, balancer, s);
++            worker_is_initialized = PROXY_WORKER_IS_INITIALIZED(workers);
+         }
++#endif
+         ap_proxy_initialize_worker_share(conf, workers, s);
+         ap_proxy_initialize_worker(workers, s);
+         if (!worker_is_initialized) {
+diff --git a/modules/proxy/proxy_util.c b/modules/proxy/proxy_util.c
+index 99898f4..d5c6363 100644
+--- a/modules/proxy/proxy_util.c
++++ b/modules/proxy/proxy_util.c
+@@ -1798,6 +1798,76 @@ static apr_status_t connection_destructor(void *resource, void *params,
+ }
+ #endif
+ 
++#if PROXY_HAS_SCOREBOARD
++void *ap_proxy_set_scoreboard_lb(proxy_worker *worker,
++                                 proxy_balancer *balancer,
++                                 server_rec *server)
++{
++    if (ap_scoreboard_image && !worker->s) {
++        int i = 0;
++        proxy_worker_stat *free_slot = NULL;
++        proxy_worker_stat *s;
++        unsigned char digest[APR_MD5_DIGESTSIZE];
++        apr_md5_ctx_t ctx;
++
++        /* The scoreboard entry must be unique per server and balancer,
++         * so when asked to (given by the caller) use their respective
++         * unique identifiers for the hash.
++         */
++        apr_md5_init(&ctx);
++        apr_md5_update(&ctx, (unsigned char *)worker->name,
++                       strlen(worker->name));
++        if (balancer) {
++            apr_md5_update(&ctx, (unsigned char *)balancer->name,
++                           strlen(balancer->name));
++        }
++        if (server) {
++            server_addr_rec *addr;
++            /* Assumes the unique identifier of a vhost is its address(es)
++             * plus the ServerName:Port. Should two or more vhosts have this
++             * same identifier, the first one would always be elected to
++             * handle the requests, so this shouldn't be an issue...
++             */
++            for (addr = server->addrs; addr; addr = addr->next) {
++                char host_ip[64]; /* for any IPv[46] string */
++                apr_sockaddr_ip_getbuf(host_ip, sizeof host_ip,
++                                       addr->host_addr);
++                apr_md5_update(&ctx, (unsigned char *)host_ip,
++                               strlen(host_ip));
++                apr_md5_update(&ctx, (unsigned char *)&addr->host_port,
++                               sizeof(addr->host_port));
++            }
++            apr_md5_update(&ctx, (unsigned char *)server->server_hostname,
++                           strlen(server->server_hostname));
++            apr_md5_update(&ctx, (unsigned char *)&server->port,
++                           sizeof(server->port));
++        }
++        apr_md5_final(digest, &ctx);
++
++        /* Try to find out the right shared memory according to the hash */
++        while ((s = (proxy_worker_stat *)ap_get_scoreboard_lb(i++)) != NULL) {
++            if ((s->status & PROXY_WORKER_INITIALIZED) == 0) {
++                if (free_slot == NULL) {
++                    free_slot = s;
++                }
++                continue;
++            }
++            if (memcmp(s->digest, digest, APR_MD5_DIGESTSIZE) == 0) {
++                worker->s = s;
++                return s;
++            }
++        }
++
++        /* We failed to find out shared memory, so just use a free slot (if any) */
++        if (free_slot) {
++            memcpy(free_slot->digest, digest, APR_MD5_DIGESTSIZE);
++            worker->s = free_slot;
++        }
++    }
++    return worker->s;
++}
++#endif
++
+ /*
+  * ap_proxy_initialize_worker_share() concerns itself
+  * with initializing those parts of worker which
+@@ -1807,11 +1877,7 @@ PROXY_DECLARE(void) ap_proxy_initialize_worker_share(proxy_server_conf *conf,
+                                                      proxy_worker *worker,
+                                                      server_rec *s)
+ {
+-#if PROXY_HAS_SCOREBOARD
+-    lb_score *score = NULL;
+-#else
+     void *score = NULL;
+-#endif
+ 
+     if (PROXY_WORKER_IS_INITIALIZED(worker)) {
+         /* The worker share is already initialized */
+@@ -1821,18 +1887,18 @@ PROXY_DECLARE(void) ap_proxy_initialize_worker_share(proxy_server_conf *conf,
+         return;
+     }
+ #if PROXY_HAS_SCOREBOARD
+-        /* Get scoreboard slot */
++    /* Get scoreboard slot */
+     if (ap_scoreboard_image) {
+-        score = ap_get_scoreboard_lb(worker->id);
+-        if (!score) {
++        if (!ap_proxy_set_scoreboard_lb(worker, NULL, s)) {
+             ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
+-                  "proxy: ap_get_scoreboard_lb(%d) failed in child %" APR_PID_T_FMT " for worker %s",
++                  "proxy: ap_proxy_set_scoreboard_lb(%d) failed in child %" APR_PID_T_FMT " for worker %s",
+                   worker->id, getpid(), worker->name);
+         }
+         else {
+              ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, s,
+                   "proxy: grabbed scoreboard slot %d in child %" APR_PID_T_FMT " for worker %s",
+                   worker->id, getpid(), worker->name);
++             score = worker->s;
+         }
+     }
+ #endif
+@@ -1841,8 +1907,8 @@ PROXY_DECLARE(void) ap_proxy_initialize_worker_share(proxy_server_conf *conf,
+         ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, s,
+               "proxy: initialized plain memory in child %" APR_PID_T_FMT " for worker %s",
+               getpid(), worker->name);
++        worker->s = (proxy_worker_stat *)score;
+     }
+-    worker->s = (proxy_worker_stat *)score;
+     /*
+      * recheck to see if we've already been here. Possible
+      * if proxy is using scoreboard to hold shared stats
+@@ -1868,7 +1934,6 @@ PROXY_DECLARE(void) ap_proxy_initialize_worker_share(proxy_server_conf *conf,
+     }
+ 
+     worker->s->status |= (worker->status | PROXY_WORKER_INITIALIZED);
+-
+ }
+ 
+ PROXY_DECLARE(apr_status_t) ap_proxy_initialize_worker(proxy_worker *worker, server_rec *s)

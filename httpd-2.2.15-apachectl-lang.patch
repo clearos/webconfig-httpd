@@ -1,0 +1,41 @@
+diff --git a/support/apachectl.in b/support/apachectl.in
+index 0046050..01e109a 100644
+--- a/support/apachectl.in
++++ b/support/apachectl.in
+@@ -62,6 +62,9 @@ if [ -r /etc/sysconfig/httpd ]; then
+    . /etc/sysconfig/httpd
+ fi
+ 
++# Start httpd in the C locale by default.
++HTTPD_LANG=${HTTPD_LANG-"C"}
++
+ #
+ # Set this variable to a command that increases the maximum
+ # number of file descriptors allowed per child process. This is
+@@ -102,7 +105,7 @@ ERROR=$?
+ case $ARGV in
+ restart|graceful)
+     if $HTTPD $OPTIONS -t >&/dev/null; then
+-       $HTTPD $OPTIONS -k $ARGV
++       LANG=$HTTPD_LANG $HTTPD $OPTIONS -k $ARGV
+        ERROR=$?
+     else
+        echo "apachectl: Configuration syntax error, will not run \"$ARGV\":"
+@@ -110,7 +113,7 @@ restart|graceful)
+     fi
+     ;;
+ start|stop|graceful-stop)
+-    $HTTPD $OPTIONS -k $ARGV
++    LANG=$HTTPD_LANG $HTTPD $OPTIONS -k $ARGV
+     ERROR=$?
+     ;;
+ configtest)
+@@ -129,7 +132,7 @@ fullstatus)
+     $LYNX $STATUSURL
+     ;;
+ *)
+-    $HTTPD $OPTIONS $ARGV
++    LANG=$HTTPD_LANG $HTTPD $OPTIONS $ARGV
+     ERROR=$?
+ esac
+ 

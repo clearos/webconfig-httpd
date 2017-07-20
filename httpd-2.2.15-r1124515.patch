@@ -1,0 +1,66 @@
+Index: server/request.c
+===================================================================
+--- a/server/request.c	(revision 1124514)
++++ b/server/request.c	(revision 1124515)
+@@ -109,7 +109,7 @@
+         core_dir_config *d;
+         d = ap_get_module_config(r->per_dir_config, &core_module);
+         if (d->allow_encoded_slashes) {
+-            access_status = ap_unescape_url_keep2f(r->parsed_uri.path, d->decode_encoded_slashes);
++            access_status = ap_unescape_url_keep2f_ex(r->parsed_uri.path, d->decode_encoded_slashes);
+         }
+         else {
+             access_status = ap_unescape_url(r->parsed_uri.path);
+Index: server/util.c
+===================================================================
+--- a/server/util.c	(revision 1124514)
++++ b/server/util.c	(revision 1124515)
+@@ -1589,7 +1589,7 @@
+         return OK;
+ }
+ 
+-AP_DECLARE(int) ap_unescape_url_keep2f(char *url, int decode_2f)
++AP_DECLARE(int) ap_unescape_url_keep2f_ex(char *url, int decode_2f)
+ {
+     register int badesc, badpath;
+     char *x, *y;
+@@ -1640,6 +1640,11 @@
+     }
+ }
+ 
++AP_DECLARE(int) ap_unescape_url_keep2f(char *url)
++{
++    return ap_unescape_url_keep2f_ex(url, 1);
++}
++
+ AP_DECLARE(char *) ap_construct_server(apr_pool_t *p, const char *hostname,
+                                        apr_port_t port, const request_rec *r)
+ {
+Index: include/httpd.h
+===================================================================
+--- a/include/httpd.h	(revision 1124514)
++++ b/include/httpd.h	(revision 1124515)
+@@ -1450,13 +1450,21 @@
+ AP_DECLARE(int) ap_unescape_url(char *url);
+ 
+ /**
+- * Unescape a URL, but leaving %2f (slashes) escaped
++ * Unescape a URL, including encoded slashes.
+  * @param url The url to unescape
+  * @return 0 on success, non-zero otherwise
+  */
+-AP_DECLARE(int) ap_unescape_url_keep2f(char *url, int decode_slashes);
++AP_DECLARE(int) ap_unescape_url_keep2f(char *url);
+ 
+ /**
++ * Unescape a URL, including encoded slashes.
++ * @param url The url to unescape
++ * @param decode_slashes Whether or not slashes should be decoded or not
++ * @return 0 on success, non-zero otherwise
++ */
++AP_DECLARE(int) ap_unescape_url_keep2f_ex(char *url, int decode_slashes);
++
++/**
+  * Convert all double slashes to single slashes
+  * @param name The string to convert
+  */

@@ -1,0 +1,876 @@
+
+Multiple patches to improve ephemeral key handling from 2.4.x:
+
+http://svn.apache.org/viewvc?view=revision&revision=r1542327
+http://svn.apache.org/viewvc?view=revision&revision=r1598107
+http://svn.apache.org/viewvc?view=revision&revision=r1603915
+http://svn.apache.org/viewvc?view=revision&revision=r1593001
+
+--- httpd-2.2.15/LAYOUT.r1542327
++++ httpd-2.2.15/LAYOUT
+@@ -108,7 +108,6 @@ modules/ ................ Manditory and
+     mod_ssl.c ............... main source file containing API structures
+     mod_ssl.h ............... common header file of mod_ssl
+     ssl_engine_config.c ..... module configuration handling
+-    ssl_engine_dh.c ......... DSA/DH support
+     ssl_engine_init.c ....... module initialization
+     ssl_engine_io.c ......... I/O support
+     ssl_engine_kernel.c ..... SSL engine kernel
+--- httpd-2.2.15/modules/ssl/config.m4.r1542327
++++ httpd-2.2.15/modules/ssl/config.m4
+@@ -92,7 +92,6 @@ dnl #  list of module object files
+ ssl_objs="dnl
+ mod_ssl.lo dnl
+ ssl_engine_config.lo dnl
+-ssl_engine_dh.lo dnl
+ ssl_engine_init.lo dnl
+ ssl_engine_io.lo dnl
+ ssl_engine_kernel.lo dnl
+--- httpd-2.2.15/modules/ssl/mod_ssl.c.r1542327
++++ httpd-2.2.15/modules/ssl/mod_ssl.c
+@@ -439,15 +439,6 @@ int ssl_init_ssl_connection(conn_rec *c)
+ 
+     sslconn->ssl = ssl;
+ 
+-    /*
+-     *  Configure callbacks for SSL connection
+-     */
+-    SSL_set_tmp_rsa_callback(ssl, ssl_callback_TmpRSA);
+-    SSL_set_tmp_dh_callback(ssl,  ssl_callback_TmpDH);
+-#ifndef OPENSSL_NO_EC
+-    SSL_set_tmp_ecdh_callback(ssl, ssl_callback_TmpECDH);
+-#endif
+-
+     SSL_set_verify_result(ssl, X509_V_OK);
+ 
+     ssl_io_filter_init(c, ssl);
+--- httpd-2.2.15/modules/ssl/mod_ssl.dsp.r1542327
++++ httpd-2.2.15/modules/ssl/mod_ssl.dsp
+@@ -146,10 +146,6 @@ SOURCE=.\ssl_engine_config.c
+ # End Source File
+ # Begin Source File
+ 
+-SOURCE=.\ssl_engine_dh.c
+-# End Source File
+-# Begin Source File
+-
+ SOURCE=.\ssl_engine_init.c
+ # End Source File
+ # Begin Source File
+--- httpd-2.2.15/modules/ssl/ssl_engine_config.c.r1542327
++++ httpd-2.2.15/modules/ssl/ssl_engine_config.c
+@@ -77,8 +77,6 @@ SSLModConfigRec *ssl_config_global_creat
+     mc->szCryptoDevice         = NULL;
+ #endif
+ 
+-    memset(mc->pTmpKeys, 0, sizeof(mc->pTmpKeys));
+-
+     apr_pool_userdata_set(mc, SSL_MOD_CONFIG_KEY,
+                           apr_pool_cleanup_null,
+                           pool);
+--- httpd-2.2.15/modules/ssl/ssl_engine_dh.c.r1542327
++++ httpd-2.2.15/modules/ssl/ssl_engine_dh.c
+@@ -1,210 +0,0 @@
+-#if 0
+-=pod
+-#endif
+-
+-/* Licensed to the Apache Software Foundation (ASF) under one or more
+- * contributor license agreements.  See the NOTICE file distributed with
+- * this work for additional information regarding copyright ownership.
+- * The ASF licenses this file to You under the Apache License, Version 2.0
+- * (the "License"); you may not use this file except in compliance with
+- * the License.  You may obtain a copy of the License at
+- *
+- *     http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-
+-/*                      _             _
+- *  _ __ ___   ___   __| |    ___ ___| |  mod_ssl
+- * | '_ ` _ \ / _ \ / _` |   / __/ __| |  Apache Interface to OpenSSL
+- * | | | | | | (_) | (_| |   \__ \__ \ |
+- * |_| |_| |_|\___/ \__,_|___|___/___/_|
+- *                      |_____|
+- * ssl_engine_dh.c
+- * Diffie-Hellman Built-in Temporary Parameters
+- */
+-
+-#include "ssl_private.h"
+-
+-/* ----BEGIN GENERATED SECTION-------- */
+-
+-/*
+-** Diffie-Hellman-Parameters: (512 bit)
+-**     prime:
+-**         00:9f:db:8b:8a:00:45:44:f0:04:5f:17:37:d0:ba:
+-**         2e:0b:27:4c:df:1a:9f:58:82:18:fb:43:53:16:a1:
+-**         6e:37:41:71:fd:19:d8:d8:f3:7c:39:bf:86:3f:d6:
+-**         0e:3e:30:06:80:a3:03:0c:6e:4c:37:57:d0:8f:70:
+-**         e6:aa:87:10:33
+-**     generator: 2 (0x2)
+-** Diffie-Hellman-Parameters: (1024 bit)
+-**     prime:
+-**         00:d6:7d:e4:40:cb:bb:dc:19:36:d6:93:d3:4a:fd:
+-**         0a:d5:0c:84:d2:39:a4:5f:52:0b:b8:81:74:cb:98:
+-**         bc:e9:51:84:9f:91:2e:63:9c:72:fb:13:b4:b4:d7:
+-**         17:7e:16:d5:5a:c1:79:ba:42:0b:2a:29:fe:32:4a:
+-**         46:7a:63:5e:81:ff:59:01:37:7b:ed:dc:fd:33:16:
+-**         8a:46:1a:ad:3b:72:da:e8:86:00:78:04:5b:07:a7:
+-**         db:ca:78:74:08:7d:15:10:ea:9f:cc:9d:dd:33:05:
+-**         07:dd:62:db:88:ae:aa:74:7d:e0:f4:d6:e2:bd:68:
+-**         b0:e7:39:3e:0f:24:21:8e:b3
+-**     generator: 2 (0x2)
+-*/
+-
+-static unsigned char dh512_p[] = {
+-    0x9F, 0xDB, 0x8B, 0x8A, 0x00, 0x45, 0x44, 0xF0, 0x04, 0x5F, 0x17, 0x37,
+-    0xD0, 0xBA, 0x2E, 0x0B, 0x27, 0x4C, 0xDF, 0x1A, 0x9F, 0x58, 0x82, 0x18,
+-    0xFB, 0x43, 0x53, 0x16, 0xA1, 0x6E, 0x37, 0x41, 0x71, 0xFD, 0x19, 0xD8,
+-    0xD8, 0xF3, 0x7C, 0x39, 0xBF, 0x86, 0x3F, 0xD6, 0x0E, 0x3E, 0x30, 0x06,
+-    0x80, 0xA3, 0x03, 0x0C, 0x6E, 0x4C, 0x37, 0x57, 0xD0, 0x8F, 0x70, 0xE6,
+-    0xAA, 0x87, 0x10, 0x33,
+-};
+-static unsigned char dh512_g[] = {
+-    0x02,
+-};
+-
+-static DH *get_dh512(void)
+-{
+-    return modssl_dh_configure(dh512_p, sizeof(dh512_p),
+-                               dh512_g, sizeof(dh512_g));
+-}
+-
+-static unsigned char dh1024_p[] = {
+-    0xD6, 0x7D, 0xE4, 0x40, 0xCB, 0xBB, 0xDC, 0x19, 0x36, 0xD6, 0x93, 0xD3,
+-    0x4A, 0xFD, 0x0A, 0xD5, 0x0C, 0x84, 0xD2, 0x39, 0xA4, 0x5F, 0x52, 0x0B,
+-    0xB8, 0x81, 0x74, 0xCB, 0x98, 0xBC, 0xE9, 0x51, 0x84, 0x9F, 0x91, 0x2E,
+-    0x63, 0x9C, 0x72, 0xFB, 0x13, 0xB4, 0xB4, 0xD7, 0x17, 0x7E, 0x16, 0xD5,
+-    0x5A, 0xC1, 0x79, 0xBA, 0x42, 0x0B, 0x2A, 0x29, 0xFE, 0x32, 0x4A, 0x46,
+-    0x7A, 0x63, 0x5E, 0x81, 0xFF, 0x59, 0x01, 0x37, 0x7B, 0xED, 0xDC, 0xFD,
+-    0x33, 0x16, 0x8A, 0x46, 0x1A, 0xAD, 0x3B, 0x72, 0xDA, 0xE8, 0x86, 0x00,
+-    0x78, 0x04, 0x5B, 0x07, 0xA7, 0xDB, 0xCA, 0x78, 0x74, 0x08, 0x7D, 0x15,
+-    0x10, 0xEA, 0x9F, 0xCC, 0x9D, 0xDD, 0x33, 0x05, 0x07, 0xDD, 0x62, 0xDB,
+-    0x88, 0xAE, 0xAA, 0x74, 0x7D, 0xE0, 0xF4, 0xD6, 0xE2, 0xBD, 0x68, 0xB0,
+-    0xE7, 0x39, 0x3E, 0x0F, 0x24, 0x21, 0x8E, 0xB3,
+-};
+-static unsigned char dh1024_g[] = {
+-    0x02,
+-};
+-
+-static DH *get_dh1024(void)
+-{
+-    return modssl_dh_configure(dh1024_p, sizeof(dh1024_p),
+-                               dh1024_g, sizeof(dh1024_g));
+-}
+-
+-/* ----END GENERATED SECTION---------- */
+-
+-DH *ssl_dh_GetTmpParam(int nKeyLen)
+-{
+-    DH *dh;
+-
+-    if (nKeyLen == 512)
+-        dh = get_dh512();
+-    else if (nKeyLen == 1024)
+-        dh = get_dh1024();
+-    else
+-        dh = get_dh1024();
+-    return dh;
+-}
+-
+-DH *ssl_dh_GetParamFromFile(char *file)
+-{
+-    DH *dh = NULL;
+-    BIO *bio;
+-
+-    if ((bio = BIO_new_file(file, "r")) == NULL)
+-        return NULL;
+-#if SSL_LIBRARY_VERSION < 0x00904000
+-    dh = PEM_read_bio_DHparams(bio, NULL, NULL);
+-#else
+-    dh = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
+-#endif
+-    BIO_free(bio);
+-    return (dh);
+-}
+-
+-/*
+-=cut
+-##
+-##  Embedded Perl script for generating the temporary DH parameters
+-##
+-
+-require 5.003;
+-use strict;
+-
+-#   configuration
+-my $file  = $0;
+-my $begin = '----BEGIN GENERATED SECTION--------';
+-my $end   = '----END GENERATED SECTION----------';
+-
+-#   read ourself and keep a backup
+-open(FP, "<$file") || die;
+-my $source = '';
+-$source .= $_ while (<FP>);
+-close(FP);
+-open(FP, ">$file.bak") || die;
+-print FP $source;
+-close(FP);
+-
+-#   generate the DH parameters
+-print "1. Generate 512 and 1024 bit Diffie-Hellman parameters (p, g)\n";
+-my $rand = '';
+-foreach $file (qw(/var/log/messages /var/adm/messages
+-                  /kernel /vmunix /vmlinuz /etc/hosts /etc/resolv.conf)) {
+-    if (-f $file) {
+-        $rand = $file     if ($rand eq '');
+-        $rand .= ":$file" if ($rand ne '');
+-    }
+-}
+-$rand = "-rand $rand" if ($rand ne '');
+-system("openssl gendh $rand -out dh512.pem 512");
+-system("openssl gendh $rand -out dh1024.pem 1024");
+-
+-#   generate DH param info
+-my $dhinfo = '';
+-open(FP, "openssl dh -noout -text -in dh512.pem |") || die;
+-$dhinfo .= $_ while (<FP>);
+-close(FP);
+-open(FP, "openssl dh -noout -text -in dh1024.pem |") || die;
+-$dhinfo .= $_ while (<FP>);
+-close(FP);
+-$dhinfo =~ s|^|** |mg;
+-$dhinfo = "\n\/\*\n$dhinfo\*\/\n\n";
+-
+-#   generate C source from DH params
+-my $dhsource = '';
+-open(FP, "openssl dh -noout -C -in dh512.pem | indent | expand |") || die;
+-$dhsource .= $_ while (<FP>);
+-close(FP);
+-open(FP, "openssl dh -noout -C -in dh1024.pem | indent | expand |") || die;
+-$dhsource .= $_ while (<FP>);
+-close(FP);
+-$dhsource =~ s|(DH\s+\*get_dh)(\d+)[^}]*\n}|static $1$2(void)
+-{
+-    return modssl_dh_configure(dh$2_p, sizeof(dh$2_p),
+-                               dh$2_g, sizeof(dh$2_g));
+-}
+-|sg;
+-
+-#   generate output
+-my $o = $dhinfo . $dhsource;
+-
+-#   insert the generated code at the target location
+-$source =~ s|(\/\* $begin.+?\n).*\n(.*?\/\* $end)|$1$o$2|s;
+-
+-#   and update the source on disk
+-print "Updating file `$file'\n";
+-open(FP, ">$file") || die;
+-print FP $source;
+-close(FP);
+-
+-#   cleanup
+-unlink("dh512.pem");
+-unlink("dh1024.pem");
+-
+-=pod
+-*/
+--- httpd-2.2.15/modules/ssl/ssl_engine_init.c.r1542327
++++ httpd-2.2.15/modules/ssl/ssl_engine_init.c
+@@ -52,153 +52,76 @@ static void ssl_add_version_components(a
+ 
+ 
+ /*
+- * Handle the Temporary RSA Keys and DH Params
++ * Grab well-defined DH parameters from OpenSSL, see the get_rfc*
++ * functions in <openssl/bn.h> for all available primes.
+  */
+-
+-#define MODSSL_TMP_KEY_FREE(mc, type, idx) \
+-    if (mc->pTmpKeys[idx]) { \
+-        type##_free((type *)mc->pTmpKeys[idx]); \
+-        mc->pTmpKeys[idx] = NULL; \
+-    }
+-
+-#define MODSSL_TMP_KEYS_FREE(mc, type) \
+-    MODSSL_TMP_KEY_FREE(mc, type, SSL_TMP_KEY_##type##_512); \
+-    MODSSL_TMP_KEY_FREE(mc, type, SSL_TMP_KEY_##type##_1024)
+-
+-static void ssl_tmp_keys_free(server_rec *s)
+-{
+-    SSLModConfigRec *mc = myModConfig(s);
+-
+-    MODSSL_TMP_KEYS_FREE(mc, RSA);
+-    MODSSL_TMP_KEYS_FREE(mc, DH);
+-#ifndef OPENSSL_NO_EC
+-    MODSSL_TMP_KEY_FREE(mc, EC_KEY, SSL_TMP_KEY_EC_256);
+-#endif
+-}
+-
+-static int ssl_tmp_key_init_rsa(server_rec *s,
+-                                int bits, int idx)
++static DH *make_dh_params(BIGNUM *(*prime)(BIGNUM *), const char *gen)
+ {
+-    SSLModConfigRec *mc = myModConfig(s);
++    DH *dh = DH_new();
+ 
+-#ifdef HAVE_FIPS
+-    if (FIPS_mode() && bits < 1024) {
+-        mc->pTmpKeys[idx] = NULL;
+-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
+-                     "Init: Skipping generating temporary "
+-                     "%d bit RSA private key in FIPS mode", bits);
+-        return OK;
++    if (!dh) {
++        return NULL;
+     }
+-#endif
+-
+-    if (!(mc->pTmpKeys[idx] =
+-          RSA_generate_key(bits, RSA_F4, NULL, NULL)))
+-    {
+-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
+-                     "Init: Failed to generate temporary "
+-                     "%d bit RSA private key", bits);
+-        ssl_log_ssl_error(APLOG_MARK, APLOG_ERR, s);
+-        return !OK;
++    dh->p = prime(NULL);
++    BN_dec2bn(&dh->g, gen);
++    if (!dh->p || !dh->g) {
++        DH_free(dh);
++        return NULL;
+     }
+-
+-    return OK;
++    return dh;
+ }
+ 
+-static int ssl_tmp_key_init_dh(server_rec *s,
+-                               int bits, int idx)
+-{
+-    SSLModConfigRec *mc = myModConfig(s);
+-
+-#ifdef HAVE_FIPS
+-    if (FIPS_mode() && bits < 1024) {
+-        mc->pTmpKeys[idx] = NULL;
+-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
+-                     "Init: Skipping generating temporary "
+-                     "%d bit DH parameters in FIPS mode", bits);
+-        return OK;
+-    }
+-#endif
++/* Storage and initialization for DH parameters. */
++static struct dhparam {
++    BIGNUM *(*const prime)(BIGNUM *); /* function to generate... */
++    DH *dh;                           /* ...this, used for keys.... */
++    const unsigned int min;           /* ...of length >= this. */
++} dhparams[] = {
++    { get_rfc3526_prime_8192, NULL, 6145 },
++    { get_rfc3526_prime_6144, NULL, 4097 },
++    { get_rfc3526_prime_4096, NULL, 3073 },
++    { get_rfc3526_prime_3072, NULL, 2049 },
++    { get_rfc3526_prime_2048, NULL, 1025 },
++    { get_rfc2409_prime_1024, NULL, 0 }
++};
+ 
+-    if (!(mc->pTmpKeys[idx] =
+-          ssl_dh_GetTmpParam(bits)))
+-    {
+-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
+-                     "Init: Failed to generate temporary "
+-                     "%d bit DH parameters", bits);
+-        return !OK;
+-    }
++static void init_dh_params(void)
++{
++    unsigned n;
+ 
+-    return OK;
++    for (n = 0; n < sizeof(dhparams)/sizeof(dhparams[0]); n++)
++        dhparams[n].dh = make_dh_params(dhparams[n].prime, "2");
+ }
+ 
+-#ifndef OPENSSL_NO_EC
+-static int ssl_tmp_key_init_ec(server_rec *s,
+-                               int bits, int idx)
++static void free_dh_params(void)
+ {
+-    SSLModConfigRec *mc = myModConfig(s);
+-    EC_KEY *ecdh = NULL;
++    unsigned n;
+ 
+-    /* XXX: Are there any FIPS constraints we should enforce? */
+-
+-    if (bits != 256) {
+-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
+-                     "Init: Failed to generate temporary "
+-                     "%d bit EC parameters, only 256 bits supported", bits);
+-        return !OK;
+-    }
+-
+-    if ((ecdh = EC_KEY_new()) == NULL ||
+-        EC_KEY_set_group(ecdh, EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1)) != 1)
+-    {
+-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
+-                     "Init: Failed to generate temporary "
+-                     "%d bit EC parameters", bits);
+-        return !OK;
++    /* DH_free() is a noop for a NULL parameter, so these are harmless
++     * in the (unexpected) case where these variables are already
++     * NULL. */
++    for (n = 0; n < sizeof(dhparams)/sizeof(dhparams[0]); n++) {
++        DH_free(dhparams[n].dh);
++        dhparams[n].dh = NULL;
+     }
+-
+-    mc->pTmpKeys[idx] = ecdh;
+-    return OK;
+ }
+ 
+-#define MODSSL_TMP_KEY_INIT_EC(s, bits) \
+-    ssl_tmp_key_init_ec(s, bits, SSL_TMP_KEY_EC_##bits)
+-
+-#endif
+-
+-#define MODSSL_TMP_KEY_INIT_RSA(s, bits) \
+-    ssl_tmp_key_init_rsa(s, bits, SSL_TMP_KEY_RSA_##bits)
+-
+-#define MODSSL_TMP_KEY_INIT_DH(s, bits) \
+-    ssl_tmp_key_init_dh(s, bits, SSL_TMP_KEY_DH_##bits)
+-
+-static int ssl_tmp_keys_init(server_rec *s)
++/* Hand out the same DH structure though once generated as we leak
++ * memory otherwise and freeing the structure up after use would be
++ * hard to track and in fact is not needed at all as it is safe to
++ * use the same parameters over and over again security wise (in
++ * contrast to the keys itself) and code safe as the returned structure
++ * is duplicated by OpenSSL anyway. Hence no modification happens
++ * to our copy. */
++DH *modssl_get_dh_params(unsigned keylen)
+ {
+-    ap_log_error(APLOG_MARK, APLOG_INFO, 0, s,
+-                 "Init: Generating temporary RSA private keys (512/1024 bits)");
+-
+-    if (MODSSL_TMP_KEY_INIT_RSA(s, 512) ||
+-        MODSSL_TMP_KEY_INIT_RSA(s, 1024)) {
+-        return !OK;
+-    }
+-
+-    ap_log_error(APLOG_MARK, APLOG_INFO, 0, s,
+-                 "Init: Generating temporary DH parameters (512/1024 bits)");
+-
+-    if (MODSSL_TMP_KEY_INIT_DH(s, 512) ||
+-        MODSSL_TMP_KEY_INIT_DH(s, 1024)) {
+-        return !OK;
+-    }
+-
+-#ifndef OPENSSL_NO_EC
+-    ap_log_error(APLOG_MARK, APLOG_INFO, 0, s,
+-                 "Init: Generating temporary EC parameters (256 bits)");
+-
+-    if (MODSSL_TMP_KEY_INIT_EC(s, 256)) {
+-        return !OK;
+-    }
+-#endif
++    unsigned n;
+ 
+-    return OK;
++    for (n = 0; n < sizeof(dhparams)/sizeof(dhparams[0]); n++)
++        if (keylen >= dhparams[n].min)
++            return dhparams[n].dh;
++        
++    return NULL; /* impossible to reach. */
+ }
+ 
+ /*
+@@ -305,10 +228,6 @@ int ssl_init_Module(apr_pool_t *p, apr_p
+      */
+     ssl_pphrase_Handle(base_server, ptemp);
+ 
+-    if (ssl_tmp_keys_init(base_server)) {
+-        return !OK;
+-    }
+-
+     /*
+      * initialize the mutex handling
+      */
+@@ -354,6 +273,8 @@ int ssl_init_Module(apr_pool_t *p, apr_p
+ 
+     SSL_init_app_data2_idx(); /* for SSL_get_app_data2() at request time */
+ 
++    init_dh_params();
++
+     return OK;
+ }
+ 
+@@ -561,6 +482,9 @@ static void ssl_init_ctx_protocol(server
+      * Configure additional context ingredients
+      */
+     SSL_CTX_set_options(ctx, SSL_OP_SINGLE_DH_USE);
++#ifndef OPENSSL_NO_EC
++    SSL_CTX_set_options(ctx, SSL_OP_SINGLE_ECDH_USE);
++#endif
+ 
+ #ifdef SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION
+     /*
+@@ -601,11 +525,7 @@ static void ssl_init_ctx_callbacks(serve
+ {
+     SSL_CTX *ctx = mctx->ssl_ctx;
+ 
+-    SSL_CTX_set_tmp_rsa_callback(ctx, ssl_callback_TmpRSA);
+     SSL_CTX_set_tmp_dh_callback(ctx,  ssl_callback_TmpDH);
+-#ifndef OPENSSL_NO_EC
+-    SSL_CTX_set_tmp_ecdh_callback(ctx,ssl_callback_TmpECDH);
+-#endif
+ 
+     SSL_CTX_set_info_callback(ctx, ssl_callback_Info);
+ }
+@@ -995,10 +915,14 @@ static void ssl_init_server_certs(server
+     const char *rsa_id, *dsa_id;
+ #ifndef OPENSSL_NO_EC
+     const char *ecc_id;
++    EC_GROUP *ecparams;
++    int nid;
++    EC_KEY *eckey;
+ #endif
+     const char *vhost_id = mctx->sc->vhost_id;
+     int i;
+     int have_rsa, have_dsa;
++    DH *dhparams;
+ #ifndef OPENSSL_NO_EC
+     int have_ecc;
+ #endif
+@@ -1053,6 +977,40 @@ static void ssl_init_server_certs(server
+ #endif
+         ssl_die();
+     }
++
++    /*
++     * Try to read DH parameters from the (first) SSLCertificateFile
++     */
++    if ((mctx->pks->cert_files[0] != NULL) &&
++        (dhparams = ssl_dh_GetParamFromFile(mctx->pks->cert_files[0]))) {
++        SSL_CTX_set_tmp_dh(mctx->ssl_ctx, dhparams);
++        ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, s,
++                     "Custom DH parameters (%d bits) for %s loaded from %s",
++                     BN_num_bits(dhparams->p), vhost_id,
++                     mctx->pks->cert_files[0]);
++    }
++
++#ifndef OPENSSL_NO_EC
++    /*
++     * Similarly, try to read the ECDH curve name from SSLCertificateFile...
++     */
++    if ((mctx->pks->cert_files[0] != NULL) &&
++        (ecparams = ssl_ec_GetParamFromFile(mctx->pks->cert_files[0])) &&
++        (nid = EC_GROUP_get_curve_name(ecparams)) &&
++        (eckey = EC_KEY_new_by_curve_name(nid))) {
++        SSL_CTX_set_tmp_ecdh(mctx->ssl_ctx, eckey);
++        ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, s,
++                     "ECDH curve %s for %s specified in %s",
++                     OBJ_nid2sn(nid), vhost_id, mctx->pks->cert_files[0]);
++    }
++    /*
++     * ...otherwise, configure NIST P-256 (required to enable ECDHE)
++     */
++    else {
++        SSL_CTX_set_tmp_ecdh(mctx->ssl_ctx,
++                             EC_KEY_new_by_curve_name(NID_X9_62_prime256v1));
++    }
++#endif
+ }
+ 
+ static void ssl_init_proxy_certs(server_rec *s,
+@@ -1426,11 +1384,6 @@ apr_status_t ssl_init_ModuleKill(void *d
+     ssl_scache_kill(base_server);
+ 
+     /*
+-     * Destroy the temporary keys and params
+-     */
+-    ssl_tmp_keys_free(base_server);
+-
+-    /*
+      * Free the non-pool allocated structures
+      * in the per-server configurations
+      */
+@@ -1442,6 +1395,8 @@ apr_status_t ssl_init_ModuleKill(void *d
+         ssl_init_ctx_cleanup_server(sc->server);
+     }
+ 
++    free_dh_params();
++
+     return APR_SUCCESS;
+ }
+ 
+--- httpd-2.2.15/modules/ssl/ssl_engine_kernel.c.r1542327
++++ httpd-2.2.15/modules/ssl/ssl_engine_kernel.c
+@@ -1199,117 +1199,47 @@ int ssl_hook_Fixup(request_rec *r)
+ */
+ 
+ /*
+- * Handle out temporary RSA private keys on demand
+- *
+- * The background of this as the TLSv1 standard explains it:
+- *
+- * | D.1. Temporary RSA keys
+- * |
+- * |    US Export restrictions limit RSA keys used for encryption to 512
+- * |    bits, but do not place any limit on lengths of RSA keys used for
+- * |    signing operations. Certificates often need to be larger than 512
+- * |    bits, since 512-bit RSA keys are not secure enough for high-value
+- * |    transactions or for applications requiring long-term security. Some
+- * |    certificates are also designated signing-only, in which case they
+- * |    cannot be used for key exchange.
+- * |
+- * |    When the public key in the certificate cannot be used for encryption,
+- * |    the server signs a temporary RSA key, which is then exchanged. In
+- * |    exportable applications, the temporary RSA key should be the maximum
+- * |    allowable length (i.e., 512 bits). Because 512-bit RSA keys are
+- * |    relatively insecure, they should be changed often. For typical
+- * |    electronic commerce applications, it is suggested that keys be
+- * |    changed daily or every 500 transactions, and more often if possible.
+- * |    Note that while it is acceptable to use the same temporary key for
+- * |    multiple transactions, it must be signed each time it is used.
+- * |
+- * |    RSA key generation is a time-consuming process. In many cases, a
+- * |    low-priority process can be assigned the task of key generation.
+- * |    Whenever a new key is completed, the existing temporary key can be
+- * |    replaced with the new one.
+- *
+- * XXX: base on comment above, if thread support is enabled,
+- * we should spawn a low-priority thread to generate new keys
+- * on the fly.
+- *
+- * So we generated 512 and 1024 bit temporary keys on startup
+- * which we now just hand out on demand....
++ * Hand out standard DH parameters, based on the authentication strength
+  */
+-
+-RSA *ssl_callback_TmpRSA(SSL *ssl, int export, int keylen)
++DH *ssl_callback_TmpDH(SSL *ssl, int export, int keylen)
+ {
+     conn_rec *c = (conn_rec *)SSL_get_app_data(ssl);
+-    SSLModConfigRec *mc = myModConfigFromConn(c);
+-    int idx;
+-
+-    ap_log_cerror(APLOG_MARK, APLOG_DEBUG, 0, c,
+-                  "handing out temporary %d bit RSA key", keylen);
++    EVP_PKEY *pkey;
++    int type;
+ 
+-    /* doesn't matter if export flag is on,
+-     * we won't be asked for keylen > 512 in that case.
+-     * if we are asked for a keylen > 1024, it is too expensive
+-     * to generate on the fly.
+-     * XXX: any reason not to generate 2048 bit keys at startup?
++#ifdef SSL_CERT_SET_SERVER
++    /*
++     * When multiple certs/keys are configured for the SSL_CTX: make sure
++     * that we get the private key which is indeed used for the current
++     * SSL connection (available in OpenSSL 1.0.2 or later only)
+      */
++    SSL_set_current_cert(ssl, SSL_CERT_SET_SERVER);
++#endif
++    pkey = SSL_get_privatekey(ssl);
++    type = pkey ? EVP_PKEY_type(pkey->type) : EVP_PKEY_NONE;
+ 
+-    switch (keylen) {
+-      case 512:
+-        idx = SSL_TMP_KEY_RSA_512;
+-        break;
+-
+-      case 1024:
+-      default:
+-        idx = SSL_TMP_KEY_RSA_1024;
+-    }
+-
+-    return (RSA *)mc->pTmpKeys[idx];
+-}
+-
+-/*
+- * Hand out the already generated DH parameters...
+- */
+-DH *ssl_callback_TmpDH(SSL *ssl, int export, int keylen)
+-{
+-    conn_rec *c = (conn_rec *)SSL_get_app_data(ssl);
+-    SSLModConfigRec *mc = myModConfigFromConn(c);
+-    int idx;
++    /*
++     * OpenSSL will call us with either keylen == 512 or keylen == 1024
++     * (see the definition of SSL_EXPORT_PKEYLENGTH in ssl_locl.h).
++     * Adjust the DH parameter length according to the size of the
++     * RSA/DSA private key used for the current connection, and always
++     * use at least 1024-bit parameters.
++     * Note: This may cause interoperability issues with implementations
++     * which limit their DH support to 1024 bit - e.g. Java 7 and earlier.
++     * In this case, SSLCertificateFile can be used to specify fixed
++     * 1024-bit DH parameters (with the effect that OpenSSL skips this
++     * callback).
++     */
++    if ((type == EVP_PKEY_RSA) || (type == EVP_PKEY_DSA)) {
++        keylen = EVP_PKEY_bits(pkey);
++     }
+ 
+     ap_log_cerror(APLOG_MARK, APLOG_DEBUG, 0, c,
+-                  "handing out temporary %d bit DH key", keylen);
+-
+-    switch (keylen) {
+-      case 512:
+-        idx = SSL_TMP_KEY_DH_512;
+-        break;
+-
+-      case 1024:
+-      default:
+-        idx = SSL_TMP_KEY_DH_1024;
+-    }
++                  "handing out built-in DH parameters for %d-bit authenticated connection", keylen);
+ 
+-    return (DH *)mc->pTmpKeys[idx];
++    return modssl_get_dh_params(keylen);
+ }
+ 
+-#ifndef OPENSSL_NO_EC
+-EC_KEY *ssl_callback_TmpECDH(SSL *ssl, int export, int keylen)
+-{
+-    conn_rec *c = (conn_rec *)SSL_get_app_data(ssl);
+-    SSLModConfigRec *mc = myModConfigFromConn(c);
+-    int idx;
+-
+-    /* XXX Uses 256-bit key for now. TODO: support other sizes. */
+-    ap_log_cerror(APLOG_MARK, APLOG_DEBUG, 0, c,
+-                  "handing out temporary 256 bit ECC key");
+-
+-    switch (keylen) {
+-      case 256:
+-      default:
+-        idx = SSL_TMP_KEY_EC_256;
+-    }
+-
+-    return (EC_KEY *)mc->pTmpKeys[idx];
+-}
+-#endif
+ 
+ /*
+  * This OpenSSL callback function is called when OpenSSL
+--- httpd-2.2.15/modules/ssl/ssl_private.h.r1542327
++++ httpd-2.2.15/modules/ssl/ssl_private.h
+@@ -202,22 +202,6 @@ typedef int ssl_algo_t;
+ #define SSL_AIDX_MAX     (2)
+ #endif
+ 
+-
+-/**
+- * Define IDs for the temporary RSA keys and DH params
+- */
+-
+-#define SSL_TMP_KEY_RSA_512  (0)
+-#define SSL_TMP_KEY_RSA_1024 (1)
+-#define SSL_TMP_KEY_DH_512   (2)
+-#define SSL_TMP_KEY_DH_1024  (3)
+-#ifndef OPENSSL_NO_EC
+-#define SSL_TMP_KEY_EC_256   (4)
+-#define SSL_TMP_KEY_MAX      (5)
+-#else
+-#define SSL_TMP_KEY_MAX      (4)
+-#endif
+-
+ /**
+  * Define the SSL options
+  */
+@@ -416,7 +400,11 @@ typedef struct {
+     apr_global_mutex_t   *pMutex;
+     apr_array_header_t   *aRandSeed;
+     apr_hash_t     *tVHostKeys;
+-    void           *pTmpKeys[SSL_TMP_KEY_MAX];
++    /*** NOTE: pTmpKeys is no longer used after the r1542327 patch,
++     * but is retained in mod_ssl since SSLModConfigRec lasts for
++     * process lifetime, and at restart mod_ssl can potentially load a
++     * structure from an older version of mod_ssl. */
++    void           *pTmpKeys[4];
+     apr_hash_t     *tPublicCert;
+     apr_hash_t     *tPrivateKey;
+ #if defined(HAVE_OPENSSL_ENGINE_H) && defined(HAVE_ENGINE_INIT)
+@@ -610,11 +598,7 @@ int          ssl_hook_Upgrade(request_re
+ void         ssl_hook_ConfigTest(apr_pool_t *pconf, server_rec *s);
+ 
+ /**  OpenSSL callbacks */
+-RSA         *ssl_callback_TmpRSA(SSL *, int, int);
+ DH          *ssl_callback_TmpDH(SSL *, int, int);
+-#ifndef OPENSSL_NO_EC
+-EC_KEY      *ssl_callback_TmpECDH(SSL *, int, int);
+-#endif
+ int          ssl_callback_SSLVerify(int, X509_STORE_CTX *);
+ int          ssl_callback_SSLVerify_CRL(int, X509_STORE_CTX *, conn_rec *);
+ int          ssl_callback_proxy_cert(SSL *ssl, MODSSL_CLIENT_CERT_CB_ARG_TYPE **x509, EVP_PKEY **pkey);
+@@ -626,6 +610,11 @@ void         ssl_callback_Info(MODSSL_IN
+ int          ssl_callback_ServerNameIndication(SSL *, int *, modssl_ctx_t *);
+ #endif
+ 
++/* Retrieve DH parameters for given key length.  Return value should
++ * be treated as unmutable, since it is stored in process-global
++ * memory. */
++DH *modssl_get_dh_params(unsigned keylen);
++
+ /**  Session Cache Support  */
+ void         ssl_scache_init(server_rec *, apr_pool_t *);
+ void         ssl_scache_status_register(apr_pool_t *p);
+@@ -689,8 +678,10 @@ int          ssl_init_ssl_connection(con
+ void         ssl_pphrase_Handle(server_rec *, apr_pool_t *);
+ 
+ /**  Diffie-Hellman Parameter Support  */
+-DH           *ssl_dh_GetTmpParam(int);
+-DH           *ssl_dh_GetParamFromFile(char *);
++DH           *ssl_dh_GetParamFromFile(const char *);
++#ifndef OPENSSL_NO_EC
++EC_GROUP     *ssl_ec_GetParamFromFile(const char *);
++#endif
+ 
+ unsigned char *ssl_asn1_table_set(apr_hash_t *table,
+                                   const char *key,
+--- httpd-2.2.15/modules/ssl/ssl_util_ssl.c.r1542327
++++ httpd-2.2.15/modules/ssl/ssl_util_ssl.c
+@@ -451,6 +451,38 @@ BOOL SSL_X509_INFO_load_path(apr_pool_t
+ 
+ /*  _________________________________________________________________
+ **
++**  Custom (EC)DH parameter support
++**  _________________________________________________________________
++*/
++
++DH *ssl_dh_GetParamFromFile(const char *file)
++{
++    DH *dh = NULL;
++    BIO *bio;
++
++    if ((bio = BIO_new_file(file, "r")) == NULL)
++        return NULL;
++    dh = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
++    BIO_free(bio);
++    return (dh);
++}
++
++#ifndef OPENSSL_NO_EC
++EC_GROUP *ssl_ec_GetParamFromFile(const char *file)
++{
++    EC_GROUP *group = NULL;
++    BIO *bio;
++
++    if ((bio = BIO_new_file(file, "r")) == NULL)
++        return NULL;
++    group = PEM_read_bio_ECPKParameters(bio, NULL, NULL, NULL);
++    BIO_free(bio);
++    return (group);
++}
++#endif
++
++/*  _________________________________________________________________
++**
+ **  Extra Server Certificate Chain Support
+ **  _________________________________________________________________
+ */

@@ -1,0 +1,26 @@
+--- a/server/main.c	2012/08/21 17:36:40	1375679
++++ b/server/main.c	2012/08/21 17:37:50	1375680
+@@ -661,6 +661,11 @@
+         }
+     }
+ 
++    /* If our config failed, deal with that here. */
++    if (rv != OK) {
++        destroy_and_exit_process(process, 1);
++    }
++
+     signal_server = APR_RETRIEVE_OPTIONAL_FN(ap_signal_server);
+     if (signal_server) {
+         int exit_status;
+@@ -670,11 +675,6 @@
+         }
+     }
+ 
+-    /* If our config failed, deal with that here. */
+-    if (rv != OK) {
+-        destroy_and_exit_process(process, 1);
+-    }
+-
+     apr_pool_clear(plog);
+ 
+     if ( ap_run_open_logs(pconf, plog, ptemp, server_conf) != OK) {

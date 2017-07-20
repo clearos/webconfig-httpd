@@ -1,0 +1,165 @@
+diff --git a/modules/ssl/mod_ssl.c b/modules/ssl/mod_ssl.c
+index 0424c6a..03d405b 100644
+--- a/modules/ssl/mod_ssl.c
++++ b/modules/ssl/mod_ssl.c
+@@ -157,6 +157,8 @@ static const command_rec ssl_config_cmds[] = {
+                 "Enable support for insecure renegotiation")
+     SSL_CMD_ALL(UserName, TAKE1,
+                 "Set user name to SSL variable value")
++    SSL_CMD_ALL(DisableCRLCaching, FLAG,
++                "Disable ('on') or enable (default, 'off') CRL caching")
+     SSL_CMD_SRV(StrictSNIVHostCheck, FLAG,
+                 "Strict SNI virtual host checking")
+ 
+diff --git a/modules/ssl/ssl_engine_config.c b/modules/ssl/ssl_engine_config.c
+index a0247e6..8809a0d 100644
+--- a/modules/ssl/ssl_engine_config.c
++++ b/modules/ssl/ssl_engine_config.c
+@@ -169,6 +169,7 @@ static SSLSrvConfigRec *ssl_config_server_new(apr_pool_t *p)
+     sc->session_cache_timeout  = UNSET;
+     sc->cipher_server_pref     = UNSET;
+     sc->insecure_reneg         = UNSET;
++    sc->disable_crl_caching    = UNSET;
+     sc->proxy_ssl_check_peer_expire = SSL_ENABLED_UNSET;
+     sc->proxy_ssl_check_peer_cn     = SSL_ENABLED_UNSET;
+ #ifndef OPENSSL_NO_TLSEXT
+@@ -263,6 +264,7 @@ void *ssl_config_server_merge(apr_pool_t *p, void *basev, void *addv)
+     cfgMergeInt(session_cache_timeout);
+     cfgMergeBool(cipher_server_pref);
+     cfgMergeBool(insecure_reneg);
++    cfgMergeBool(disable_crl_caching);
+     cfgMerge(proxy_ssl_check_peer_expire, SSL_ENABLED_UNSET);
+     cfgMerge(proxy_ssl_check_peer_cn, SSL_ENABLED_UNSET);
+ #ifndef OPENSSL_NO_TLSEXT
+@@ -1291,6 +1293,15 @@ const char *ssl_cmd_SSLProtocol(cmd_parms *cmd,
+     return ssl_cmd_protocol_parse(cmd, arg, &sc->server->protocol);
+ }
+ 
++const char *ssl_cmd_SSLDisableCRLCaching(cmd_parms *cmd, void *dcfg, int flag)
++{
++    SSLSrvConfigRec *sc = mySrvConfig(cmd->server);
++
++    sc->disable_crl_caching = flag ? TRUE : FALSE;
++
++    return NULL;
++}
++
+ const char *ssl_cmd_SSLProxyEngine(cmd_parms *cmd, void *dcfg, int flag)
+ {
+     SSLSrvConfigRec *sc = mySrvConfig(cmd->server);
+diff --git a/modules/ssl/ssl_engine_kernel.c b/modules/ssl/ssl_engine_kernel.c
+index 1f6c675..318433f 100644
+--- a/modules/ssl/ssl_engine_kernel.c
++++ b/modules/ssl/ssl_engine_kernel.c
+@@ -1347,9 +1347,37 @@ int ssl_callback_SSLVerify(int ok, X509_STORE_CTX *ctx)
+      * Additionally perform CRL-based revocation checks
+      */
+     if (ok) {
+-        if (!(ok = ssl_callback_SSLVerify_CRL(ok, ctx, conn))) {
++        X509_STORE *store;
++
++        if (sc->disable_crl_caching == TRUE 
++            && (mctx->crl_file != NULL || mctx->crl_path != NULL)) {
++            /* Lazily create the CRL store. */
++            store = SSL_X509_STORE_create((char *)mctx->crl_file,
++                                          (char *)mctx->crl_path);
++            if (!store) {
++                ap_log_error(APLOG_MARK, APLOG_ERR, 0, s, 
++                             "Unable to configure X.509 CRL storage "
++                             "for certificate revocation in lazy CRL lookup");
++                ssl_log_ssl_error(APLOG_MARK, APLOG_ERR, s);
++                errnum = X509_V_ERR_UNABLE_TO_GET_CRL;
++                X509_STORE_CTX_set_error(ctx, errnum);
++                sslconn->verify_error = X509_verify_cert_error_string(errnum);
++                return FALSE;
++            }
++                             
++        }
++        else {
++            store = mctx->crl;
++        }
++
++        if (!(ok = ssl_callback_SSLVerify_CRL(ok, ctx, conn, store))) {
+             errnum = X509_STORE_CTX_get_error(ctx);
+         }
++
++        if (sc->disable_crl_caching == TRUE 
++            && store != NULL && store != mctx->crl) {
++            X509_STORE_free(store);
++        }
+     }
+ 
+     /*
+@@ -1397,15 +1425,12 @@ int ssl_callback_SSLVerify(int ok, X509_STORE_CTX *ctx)
+     return ok;
+ }
+ 
+-int ssl_callback_SSLVerify_CRL(int ok, X509_STORE_CTX *ctx, conn_rec *c)
++int ssl_callback_SSLVerify_CRL(int ok, X509_STORE_CTX *ctx, conn_rec *c, X509_STORE *store)
+ {
+     SSL *ssl = X509_STORE_CTX_get_ex_data(ctx,
+                                           SSL_get_ex_data_X509_STORE_CTX_idx());
+     request_rec *r      = (request_rec *)SSL_get_app_data2(ssl);
+     server_rec *s       = r ? r->server : mySrvFromConn(c);
+-    SSLSrvConfigRec *sc = mySrvConfig(s);
+-    SSLConnRec *sslconn = myConnConfig(c);
+-    modssl_ctx_t *mctx  = myCtxConfig(sslconn, sc);
+     X509_OBJECT obj;
+     X509_NAME *subject, *issuer;
+     X509 *cert;
+@@ -1417,7 +1442,7 @@ int ssl_callback_SSLVerify_CRL(int ok, X509_STORE_CTX *ctx, conn_rec *c)
+      * Unless a revocation store for CRLs was created we
+      * cannot do any CRL-based verification, of course.
+      */
+-    if (!mctx->crl) {
++    if (!store) {
+         return ok;
+     }
+ 
+@@ -1464,7 +1489,7 @@ int ssl_callback_SSLVerify_CRL(int ok, X509_STORE_CTX *ctx, conn_rec *c)
+      * the current certificate in order to verify it's integrity.
+      */
+     memset((char *)&obj, 0, sizeof(obj));
+-    rc = SSL_X509_STORE_lookup(mctx->crl,
++    rc = SSL_X509_STORE_lookup(store,
+                                X509_LU_CRL, subject, &obj);
+     crl = obj.data.crl;
+ 
+@@ -1548,7 +1573,7 @@ int ssl_callback_SSLVerify_CRL(int ok, X509_STORE_CTX *ctx, conn_rec *c)
+      * the current certificate in order to check for revocation.
+      */
+     memset((char *)&obj, 0, sizeof(obj));
+-    rc = SSL_X509_STORE_lookup(mctx->crl,
++    rc = SSL_X509_STORE_lookup(store,
+                                X509_LU_CRL, issuer, &obj);
+ 
+     crl = obj.data.crl;
+diff --git a/modules/ssl/ssl_private.h b/modules/ssl/ssl_private.h
+index 3c46a3a..61b556c 100644
+--- a/modules/ssl/ssl_private.h
++++ b/modules/ssl/ssl_private.h
+@@ -490,6 +490,7 @@ struct SSLSrvConfigRec {
+ #ifndef OPENSSL_NO_TLSEXT
+     ssl_enabled_t    strict_sni_vhost_check;
+ #endif
++    BOOL             disable_crl_caching;
+ };
+ 
+ /**
+@@ -556,6 +557,7 @@ const char  *ssl_cmd_SSLRequireSSL(cmd_parms *, void *);
+ const char  *ssl_cmd_SSLRequire(cmd_parms *, void *, const char *);
+ const char  *ssl_cmd_SSLUserName(cmd_parms *, void *, const char *);
+ const char  *ssl_cmd_SSLRenegBufferSize(cmd_parms *cmd, void *dcfg, const char *arg);
++const char  *ssl_cmd_SSLDisableCRLCaching(cmd_parms *cmd, void *dcfg, int flag);
+ const char  *ssl_cmd_SSLStrictSNIVHostCheck(cmd_parms *cmd, void *dcfg, int flag);
+ const char *ssl_cmd_SSLInsecureRenegotiation(cmd_parms *cmd, void *dcfg, int flag);
+ 
+@@ -595,7 +597,7 @@ void         ssl_hook_ConfigTest(apr_pool_t *pconf, server_rec *s);
+ /**  OpenSSL callbacks */
+ DH          *ssl_callback_TmpDH(SSL *, int, int);
+ int          ssl_callback_SSLVerify(int, X509_STORE_CTX *);
+-int          ssl_callback_SSLVerify_CRL(int, X509_STORE_CTX *, conn_rec *);
++int          ssl_callback_SSLVerify_CRL(int, X509_STORE_CTX *, conn_rec *, X509_STORE *store);
+ int          ssl_callback_proxy_cert(SSL *ssl, MODSSL_CLIENT_CERT_CB_ARG_TYPE **x509, EVP_PKEY **pkey);
+ int          ssl_callback_NewSessionCacheEntry(SSL *, SSL_SESSION *);
+ SSL_SESSION *ssl_callback_GetSessionCacheEntry(SSL *, unsigned char *, int, int *);

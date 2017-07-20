@@ -1,0 +1,114 @@
+diff --git a/modules/cache/cache_storage.c b/modules/cache/cache_storage.c
+index 2fbadc8..5678377 100644
+--- a/modules/cache/cache_storage.c
++++ b/modules/cache/cache_storage.c
+@@ -276,6 +276,7 @@ int cache_select(request_rec *r)
+                 /* Make response into a conditional */
+                 cache->stale_headers = apr_table_copy(r->pool,
+                                                       r->headers_in);
++                cache->stale_handle = h;
+ 
+                 /* We can only revalidate with our own conditionals: remove the
+                  * conditions from the original request.
+@@ -286,12 +287,6 @@ int cache_select(request_rec *r)
+                 apr_table_unset(r->headers_in, "If-Range");
+                 apr_table_unset(r->headers_in, "If-Unmodified-Since");
+ 
+-                /*
+-                 * Do not do Range requests with our own conditionals: If
+-                 * we get 304 the Range does not matter and otherwise the
+-                 * entity changed and we want to have the complete entity
+-                 */
+-                apr_table_unset(r->headers_in, "Range");
+ 
+                 etag = apr_table_get(h->resp_hdrs, "ETag");
+                 lastmod = apr_table_get(h->resp_hdrs, "Last-Modified");
+@@ -309,23 +304,13 @@ int cache_select(request_rec *r)
+                         apr_table_set(r->headers_in, "If-Modified-Since",
+                                       lastmod);
+                     }
+-                    cache->stale_handle = h;
+-                }
+-                else {
+-                    int irv;
+-
+                     /*
+-                     * The copy isn't fresh enough, but we cannot revalidate.
+-                     * So it is the same case as if there had not been a cached
+-                     * entry at all. Thus delete the entry from cache.
++                     * Do not do Range requests with our own conditionals: If
++                     * we get 304 the Range does not matter and otherwise the
++                     * entity changed and we want to have the complete entity
+                      */
+-                    irv = cache->provider->remove_url(h, r->pool);
+-                    if (irv != OK) {
+-                        ap_log_error(APLOG_MARK, APLOG_DEBUG, irv, r->server,
+-                                     "cache: attempt to remove url from cache unsuccessful.");
+-                    }
++                    apr_table_unset(r->headers_in, "Range");
+                 }
+-
+                 return DECLINED;
+             }
+ 
+diff --git a/modules/cache/mod_cache.c b/modules/cache/mod_cache.c
+index 52c14d0..9e3cc17 100644
+--- a/modules/cache/mod_cache.c
++++ b/modules/cache/mod_cache.c
+@@ -113,6 +113,27 @@ static int cache_url_handler(request_rec *r, int lookup)
+     if (rv != OK) {
+         if (rv == DECLINED) {
+             if (!lookup) {
++                char *key;
++                cache_handle_t *h;
++
++                /*
++                 * Try to use the key of a possible open but stall cache
++                 * entry if we have one.
++                 */
++                if (cache->handle != NULL) {
++                    h = cache->handle;
++                }
++                else {
++                    h = cache->stale_handle;
++                }
++                if ((h != NULL) &&
++                    (h->cache_obj != NULL) &&
++                    (h->cache_obj->key != NULL)) {
++                    key = apr_pstrdup(r->pool, h->cache_obj->key);
++                }
++                else {
++                    key = NULL;
++                }
+ 
+                 /* try to obtain a cache lock at this point. if we succeed,
+                  * we are the first to try and cache this url. if we fail,
+@@ -121,7 +142,7 @@ static int cache_url_handler(request_rec *r, int lookup)
+                  * backend without any attempt to cache. this stops
+                  * duplicated simultaneous attempts to cache an entity.
+                  */
+-                rv = ap_cache_try_lock(conf, r, NULL);
++                rv = ap_cache_try_lock(conf, r, key);
+                 if (APR_SUCCESS == rv) {
+ 
+                     /*
+diff --git a/modules/cache/mod_disk_cache.c b/modules/cache/mod_disk_cache.c
+index 13d6c8b..305fa6b 100644
+--- a/modules/cache/mod_disk_cache.c
++++ b/modules/cache/mod_disk_cache.c
+@@ -962,15 +962,6 @@ static apr_status_t store_headers(cache_handle_t *h, request_rec *r, cache_info
+ 
+     apr_file_close(dobj->hfd); /* flush and close */
+ 
+-    /* Remove old file with the same name. If remove fails, then
+-     * perhaps we need to create the directory tree where we are
+-     * about to write the new headers file.
+-     */
+-    rv = apr_file_remove(dobj->hdrsfile, r->pool);
+-    if (rv != APR_SUCCESS) {
+-        mkdir_structure(conf, dobj->hdrsfile, r->pool);
+-    }
+-
+     rv = safe_file_rename(conf, dobj->tempfile, dobj->hdrsfile, r->pool);
+     if (rv != APR_SUCCESS) {
+         ap_log_error(APLOG_MARK, APLOG_WARNING, rv, r->server,

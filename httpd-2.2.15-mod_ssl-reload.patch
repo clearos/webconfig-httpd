@@ -1,0 +1,48 @@
+diff --git a/modules/ssl/ssl_scache.c b/modules/ssl/ssl_scache.c
+index c85e4f1..9283d9b 100644
+--- a/modules/ssl/ssl_scache.c
++++ b/modules/ssl/ssl_scache.c
+@@ -60,13 +60,15 @@ void ssl_scache_init(server_rec *s, apr_pool_t *p)
+         ssl_scache_dc_init(s, p);
+ #endif
+     else if (mc->nSessionCacheMode == SSL_SCMODE_SHMCB) {
+-        void *data;
+-        const char *userdata_key = "ssl_scache_init";
+-
+-        apr_pool_userdata_get(&data, userdata_key, s->process->pool);
+-        if (!data) {
+-            apr_pool_userdata_set((const void *)1, userdata_key,
+-                                  apr_pool_cleanup_null, s->process->pool);
++        void *main_state;
++
++        /* The very first invocation of this function will be the
++        * post_config invocation during server startup; do nothing for
++        * this first (and only the first) time through, since the pool
++        * will be immediately cleared anyway.  For every subsequent
++        * invocation, initialize the configured cache. */
++        apr_pool_userdata_get(&main_state, "_X_AP_MAIN_STATE", s->process->pool);
++        if (main_state && strcmp((char *) main_state, "PRE_CONFIG") == 0) {
+             return;
+         }
+         ssl_scache_shmcb_init(s, p);
+diff --git a/server/main.c b/server/main.c
+index 9b8ecfb..cd210a0 100644
+--- a/server/main.c
++++ b/server/main.c
+@@ -635,6 +635,8 @@ int main(int argc, const char * const argv[])
+         usage(process);
+     }
+ 
++    apr_pool_userdata_set("PRE_CONFIG", "_X_AP_MAIN_STATE", apr_pool_cleanup_null, process->pool);
++
+     apr_pool_create(&plog, pglobal);
+     apr_pool_tag(plog, "plog");
+     apr_pool_create(&ptemp, pconf);
+@@ -705,6 +707,7 @@ int main(int argc, const char * const argv[])
+ 
+     apr_pool_destroy(ptemp);
+ 
++    apr_pool_userdata_set("MPM_LOOP", "_X_AP_MAIN_STATE", apr_pool_cleanup_null, process->pool);
+     for (;;) {
+         apr_hook_deregister_all();
+         apr_pool_clear(pconf);

@@ -1,0 +1,99 @@
+Index: modules/proxy/mod_proxy.c
+===================================================================
+--- a/modules/proxy/mod_proxy.c	(revision 1700407)
++++ b/modules/proxy/mod_proxy.c	(revision 1700408)
+@@ -1129,6 +1129,7 @@
+     ps->badopt = bad_error;
+     ps->badopt_set = 0;
+     ps->pool = p;
++    ps->s = s;
+ 
+     return ps;
+ }
+@@ -1172,6 +1173,7 @@
+     ps->proxy_status = (overrides->proxy_status_set == 0) ? base->proxy_status : overrides->proxy_status;
+     ps->proxy_status_set = overrides->proxy_status_set || base->proxy_status_set;
+     ps->pool = p;
++    ps->s = overrides->s;
+     return ps;
+ }
+ 
+Index: modules/proxy/mod_proxy.h
+===================================================================
+--- a/modules/proxy/mod_proxy.h	(revision 1700407)
++++ b/modules/proxy/mod_proxy.h	(revision 1700408)
+@@ -193,6 +193,7 @@
+     } proxy_status;             /* Status display options */
+     char proxy_status_set;
+     apr_pool_t *pool;           /* Pool used for allocating this struct */
++    server_rec *s;              /* The server_rec where this configuration was created in */
+ } proxy_server_conf;
+ 
+ 
+@@ -369,6 +370,7 @@
+     char            disablereuse_set;
+     apr_interval_time_t conn_timeout;
+     char            conn_timeout_set;
++    server_rec      *server;    /* The server_rec where this configuration was created in */
+ };
+ 
+ /*
+Index: modules/proxy/proxy_util.c
+===================================================================
+--- a/modules/proxy/proxy_util.c	(revision 1700407)
++++ b/modules/proxy/proxy_util.c	(revision 1700408)
+@@ -1460,6 +1460,7 @@
+     (*worker)->flush_packets = flush_off;
+     (*worker)->flush_wait = PROXY_FLUSH_WAIT;
+     (*worker)->smax = -1;
++    (*worker)->server = conf->s;
+     /* Increase the total worker count */
+     proxy_lb_workers++;
+     init_conn_pool(p, *worker);
+@@ -1807,6 +1808,7 @@
+                                  server_rec *server)
+ {
+     if (ap_scoreboard_image && !worker->s) {
++        server_rec *id_server;
+         int i = 0;
+         proxy_worker_stat *free_slot = NULL;
+         proxy_worker_stat *s;
+@@ -1824,7 +1826,13 @@
+             apr_md5_update(&ctx, (unsigned char *)balancer->name,
+                            strlen(balancer->name));
+         }
+-        if (server) {
++        if (worker->server) {
++            id_server = worker->server;
++        }
++        else {
++            id_server = server;
++        }
++        if (id_server) {
+             server_addr_rec *addr;
+             /* Assumes the unique identifier of a vhost is its address(es)
+              * plus the ServerName:Port. Should two or more vhosts have this
+@@ -1831,7 +1839,7 @@
+              * same identifier, the first one would always be elected to
+              * handle the requests, so this shouldn't be an issue...
+              */
+-            for (addr = server->addrs; addr; addr = addr->next) {
++            for (addr = id_server->addrs; addr; addr = addr->next) {
+                 char host_ip[64]; /* for any IPv[46] string */
+                 apr_sockaddr_ip_getbuf(host_ip, sizeof host_ip,
+                                        addr->host_addr);
+@@ -1840,10 +1848,10 @@
+                 apr_md5_update(&ctx, (unsigned char *)&addr->host_port,
+                                sizeof(addr->host_port));
+             }
+-            apr_md5_update(&ctx, (unsigned char *)server->server_hostname,
+-                           strlen(server->server_hostname));
+-            apr_md5_update(&ctx, (unsigned char *)&server->port,
+-                           sizeof(server->port));
++            apr_md5_update(&ctx, (unsigned char *)id_server->server_hostname,
++                           strlen(id_server->server_hostname));
++            apr_md5_update(&ctx, (unsigned char *)&id_server->port,
++                           sizeof(id_server->port));
+         }
+         apr_md5_final(digest, &ctx);
+ 

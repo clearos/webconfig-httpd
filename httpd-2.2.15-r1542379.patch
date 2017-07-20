@@ -1,0 +1,15 @@
+diff --git a/server/mpm_common.c b/server/mpm_common.c
+index 25f91fa..a94661f 100644
+--- a/server/mpm_common.c
++++ b/server/mpm_common.c
+@@ -754,6 +754,10 @@ void ap_mpm_pod_killpg(ap_pod_t *pod, int num)
+      * a while serving time-consuming requests)
+      */
+     for (i = 0; i < num && rv == APR_SUCCESS; i++) {
++        if (ap_scoreboard_image->servers[i][0].status != SERVER_READY ||
++            ap_scoreboard_image->servers[i][0].pid == 0) {
++            continue;
++        }
+         rv = dummy_connection(pod);
+     }
+ }
