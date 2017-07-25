@@ -5,9 +5,9 @@
 %define mpms worker event
 
 Summary: Apache HTTP Server
-Name: httpd
+Name: webconfig-httpd
 Version: 2.2.15
-Release: 60%{?dist}.4
+Release: 60%{?dist}.5
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.gz
 Source1: centos_index.html
@@ -157,6 +157,11 @@ Patch219: httpd-2.2.15-CVE-2015-3183.patch
 Patch220: httpd-2.2.15-CVE-2016-5387.patch
 Patch221: httpd-2.2.15-CVE-2016-8743.patch
 Patch222: httpd-2.2.15-CVE-2017-7668.patch
+Patch223: httpd-2.2.15-CVE-2017-3167.patch
+Patch224: httpd-2.2.15-CVE-2017-3169.patch
+Patch225: httpd-2.2.15-CVE-2017-7679.patch
+Patch226: httpd-2.2.15-CVE-2017-9788.patch
+
 License: ASL 2.0
 Group: System Environment/Daemons
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -365,6 +370,10 @@ Security (TLS) protocols.
 %patch220 -p1 -b .cve5387
 %patch221 -p1 -b .cve8743
 %patch222 -p1 -b .cve7668
+%patch223 -p1 -b .cve3167
+%patch224 -p1 -b .cve3169
+%patch225 -p1 -b .cve7679
+%patch226 -p1 -b .cve9788
 
 # Patch in vendor/release string
 sed "s/@VENDOR@/%{vstring}/;s/@RELEASE@/%{release}/" < %{PATCH20} | patch -p1 -b -z .release
@@ -742,8 +751,16 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/httpd/build/*.sh
 
 %changelog
-* Wed Jul 12 2017 Johnny Hughes <johnny@centos.org> - 2.2.15-60.4
+* Tue Aug 15 2017 Johnny Hughes <johnny@centos.org> - 2.2.15-60.5
 - Roll in CentOS Branding
+
+* Wed Jul 26 2017 Luboš Uhliarik <luhliari@redhat.com> - 2.2.15-60.5
+- Resolves: #1463194 - CVE-2017-3167 httpd: ap_get_basic_auth_pw()
+  authentication bypass
+- Resolves: #1463197 - CVE-2017-3169 httpd: mod_ssl NULL pointer dereference
+- Resolves: #1463207 - CVE-2017-7679 httpd: mod_mime buffer overread
+- Resolves: #1470748 - CVE-2017-9788 httpd: Uninitialized memory reflection
+  in mod_auth_digest
 
 * Fri Jul 07 2017 Luboš Uhliarik <luhliari@redhat.com> - 2.2.15-60.4
 - Related: #1427675 - CVE-2016-8743 httpd: Apache HTTP Request Parsing
