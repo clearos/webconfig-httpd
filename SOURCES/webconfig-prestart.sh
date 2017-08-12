@@ -9,7 +9,7 @@ SSL_CONF="/usr/clearos/sandbox/etc/httpd/conf/openssl.cnf"
 
 # Determine our hostname
 if [ -e /etc/clearos/network.conf ]; then
-    source /etc/clearos/network.conf
+    source /etc/clearos/network.conf 2>/dev/null
     HOSTNAME=$INTERNET_HOSTNAME
 fi
 
