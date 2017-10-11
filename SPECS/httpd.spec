@@ -4,7 +4,7 @@
 %define mmn 20120211
 %define oldmmnisa %{mmn}-%{__isa_name}-%{__isa_bits}
 %define mmnisa %{mmn}%{__isa_name}%{__isa_bits}
-%define vstring %(source /etc/os-release; echo ${REDHAT_SUPPORT_PRODUCT})
+%define vstring CentOS
 
 # Drop automatic provides for module DSOs
 %{?filter_setup:
@@ -18,7 +18,7 @@ Version: 2.4.6
 Release: 67%{?dist}.5
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
-Source1: index.html
+Source1: centos-noindex.tar.gz
 Source2: httpd.logrotate
 Source3: httpd.sysconf
 Source4: httpd-ssl-pass-dialog
@@ -555,8 +555,10 @@ EOF
 
 # Handle contentdir
 mkdir $RPM_BUILD_ROOT%{contentdir}/noindex
-install -m 644 -p $RPM_SOURCE_DIR/index.html \
-        $RPM_BUILD_ROOT%{contentdir}/noindex/index.html
+tar xzf $RPM_SOURCE_DIR/centos-noindex.tar.gz \
+        -C $RPM_BUILD_ROOT%{contentdir}/noindex/ \
+        --strip-components=1
+
 rm -rf %{contentdir}/htdocs
 
 # remove manual sources
@@ -579,7 +581,7 @@ rm -v $RPM_BUILD_ROOT%{docroot}/html/*.html \
       $RPM_BUILD_ROOT%{docroot}/cgi-bin/*
 
 # Symlink for the powered-by-$DISTRO image:
-ln -s ../../pixmaps/poweredby.png \
+ln -s ../noindex/images/poweredby.png \
         $RPM_BUILD_ROOT%{contentdir}/icons/poweredby.png
 
 # symlinks for /etc/httpd
@@ -765,7 +767,7 @@ rm -rf $RPM_BUILD_ROOT
 %{contentdir}/error/README
 %{contentdir}/error/*.var
 %{contentdir}/error/include/*.html
-%{contentdir}/noindex/index.html
+%{contentdir}/noindex/*
 
 %dir %{docroot}
 %dir %{docroot}/cgi-bin
@@ -831,6 +833,12 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/rpm/macros.httpd
 
 %changelog
+* Wed Oct 11 2017 CentOS Sources <bugs@centos.org> - 2.4.6-67.el7.centos.5
+- Remove index.html, add centos-noindex.tar.gz
+- change vstring
+- change symlink for poweredby.png
+- update welcome.conf with proper aliases
+
 * Tue Sep 19 2017 Luboš Uhliarik <luhliari@redhat.com> - 2.4.6-67.5
 - Resolves: #1493064 - CVE-2017-9798 httpd: Use-after-free by limiting
   unregistered HTTP method
