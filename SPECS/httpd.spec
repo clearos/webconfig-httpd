@@ -4,7 +4,7 @@
 %define mmn 20120211
 %define oldmmnisa %{mmn}-%{__isa_name}-%{__isa_bits}
 %define mmnisa %{mmn}%{__isa_name}%{__isa_bits}
-%define vstring CentOS
+%define vstring %(source /etc/os-release; echo ${REDHAT_SUPPORT_PRODUCT})
 
 # Drop automatic provides for module DSOs
 %{?filter_setup:
@@ -15,10 +15,10 @@
 Summary: Apache HTTP Server
 Name: httpd
 Version: 2.4.6
-Release: 67%{?dist}.5
+Release: 67%{?dist}.6
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
-Source1: centos-noindex.tar.gz
+Source1: index.html
 Source2: httpd.logrotate
 Source3: httpd.sysconf
 Source4: httpd-ssl-pass-dialog
@@ -154,6 +154,8 @@ Patch120: httpd-2.4.6-r1738878.patch
 Patch121: httpd-2.4.6-http-protocol-options-define.patch
 # https://bugzilla.redhat.com/show_bug.cgi?id=1332242
 Patch122: httpd-2.4.6-statements-comment.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1467402
+Patch123: httpd-2.4.6-rotatelogs-zombie.patch
 
 # Security fixes
 Patch200: httpd-2.4.6-CVE-2013-6438.patch
@@ -380,6 +382,7 @@ rm modules/ssl/ssl_engine_dh.c
 %patch120 -p1 -b .r1738878
 %patch121 -p1 -b .httpprotdefine
 %patch122 -p1 -b .statement-comment
+%patch123 -p1 -b .logrotate-zombie
 
 %patch200 -p1 -b .cve6438
 %patch201 -p1 -b .cve0098
@@ -555,10 +558,8 @@ EOF
 
 # Handle contentdir
 mkdir $RPM_BUILD_ROOT%{contentdir}/noindex
-tar xzf $RPM_SOURCE_DIR/centos-noindex.tar.gz \
-        -C $RPM_BUILD_ROOT%{contentdir}/noindex/ \
-        --strip-components=1
-
+install -m 644 -p $RPM_SOURCE_DIR/index.html \
+        $RPM_BUILD_ROOT%{contentdir}/noindex/index.html
 rm -rf %{contentdir}/htdocs
 
 # remove manual sources
@@ -581,7 +582,7 @@ rm -v $RPM_BUILD_ROOT%{docroot}/html/*.html \
       $RPM_BUILD_ROOT%{docroot}/cgi-bin/*
 
 # Symlink for the powered-by-$DISTRO image:
-ln -s ../noindex/images/poweredby.png \
+ln -s ../../pixmaps/poweredby.png \
         $RPM_BUILD_ROOT%{contentdir}/icons/poweredby.png
 
 # symlinks for /etc/httpd
@@ -767,7 +768,7 @@ rm -rf $RPM_BUILD_ROOT
 %{contentdir}/error/README
 %{contentdir}/error/*.var
 %{contentdir}/error/include/*.html
-%{contentdir}/noindex/*
+%{contentdir}/noindex/index.html
 
 %dir %{docroot}
 %dir %{docroot}/cgi-bin
@@ -833,11 +834,8 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/rpm/macros.httpd
 
 %changelog
-* Wed Oct 11 2017 CentOS Sources <bugs@centos.org> - 2.4.6-67.el7.centos.5
-- Remove index.html, add centos-noindex.tar.gz
-- change vstring
-- change symlink for poweredby.png
-- update welcome.conf with proper aliases
+* Tue Oct 03 2017 Luboš Uhliarik <luhliari@redhat.com> - 2.4.6-67.6
+- Resolves: #1498020 - rotatelogs: creation of zombie processes when -p is used
 
 * Tue Sep 19 2017 Luboš Uhliarik <luhliari@redhat.com> - 2.4.6-67.5
 - Resolves: #1493064 - CVE-2017-9798 httpd: Use-after-free by limiting
