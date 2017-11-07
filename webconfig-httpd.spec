@@ -8,7 +8,7 @@
 Summary: Webconfig HTTP Server
 Name: webconfig-httpd
 Version: 2.2.15
-Release: 60%{?dist}.5
+Release: 60%{?dist}.6
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.gz
 Source1: centos_index.html
@@ -116,6 +116,7 @@ Patch126: httpd-2.2.15-ab-ipv6.patch
 Patch127: httpd-2.2.15-apachectl-lang.patch
 Patch128: httpd-2.2.15-ab-ssl-error.patch
 Patch129: httpd-2.2.15-r1082630.patch
+Patch130: httpd-2.2.15-r1667676.patch
 Patch131: httpd-2.2.15-ssl-error-free.patch
 Patch132: httpd-2.2.15-r1700408.patch
 Patch133: httpd-2.2.15-r1162862.patch
@@ -130,7 +131,6 @@ Patch141: httpd-2.2.15-r895483.patch
 Patch142: httpd-2.2.15-r1542379.patch
 Patch143: httpd-2.2.15-r1681289.patch
 Patch144: httpd-2.2.15-r1681694.patch
-Patch145: httpd-2.2.15-statements-comment.patch
 Patch146: httpd-2.2.15-rotatelogs-zombie.patch
 Patch147: httpd-2.2.15-scoreboard-segfault.patch
 
@@ -161,6 +161,7 @@ Patch223: httpd-2.2.15-CVE-2017-3167.patch
 Patch224: httpd-2.2.15-CVE-2017-3169.patch
 Patch225: httpd-2.2.15-CVE-2017-7679.patch
 Patch226: httpd-2.2.15-CVE-2017-9788.patch
+Patch227: httpd-2.2.15-CVE-2017-9798.patch
 
 License: ASL 2.0
 Group: System Environment/Daemons
@@ -323,6 +324,7 @@ Layer Security (TLS) protocols.
 %patch127 -p1 -b .lang
 %patch128 -p1 -b .sslerror
 %patch129 -p1 -b .r1082630
+%patch130 -p1 -b .r1667676
 %patch131 -p1 -b .sslerrorfree
 %patch132 -p1 -b .r1700408
 %patch133 -p1 -b .r1162862
@@ -337,7 +339,6 @@ Layer Security (TLS) protocols.
 %patch142 -p1 -b .r1542379
 %patch143 -p1 -b .r1681289
 %patch144 -p1 -b .r1681694
-%patch145 -p0 -b .statement-comment
 %patch146 -p1 -b .logrotate-zombie
 %patch147 -p1 -b .scoreboard-segfault
 
@@ -368,6 +369,7 @@ Layer Security (TLS) protocols.
 %patch224 -p1 -b .cve3169
 %patch225 -p1 -b .cve7679
 %patch226 -p1 -b .cve9788
+%patch227 -p1 -b .cve9798
 
 # Patch in vendor/release string
 sed "s/@VENDOR@/%{vstring}/;s/@RELEASE@/%{release}/" < %{PATCH20} | patch -p1 -b -z .release
@@ -682,12 +684,15 @@ rm -rf $RPM_BUILD_ROOT
 %{_webconfigdir}%{_libdir}/httpd/build/*.sh
 
 %changelog
-* Tue Aug 15 2017 ClearFoundation <developer@clearfoundation.com> 2.2.15-60.5.clear
+* Tue Nov 07 2017 ClearFoundation <developer@clearfoundation.com> 2.2.15-60.clear.6
 - Move to sandbox area
 - Change branding to ClearOS
 
-* Tue Aug 15 2017 Johnny Hughes <johnny@centos.org> - 2.2.15-60.5
+* Thu Oct 19 2017 Johnny Hughes <johnny@centos.org>  - 2.2.15-60.6
 - Roll in CentOS Branding
+
+* Tue Sep 19 2017 Luboš Uhliarik <luhliari@redhat.com> - 2.2.15-60.6
+- Resolves: #1493061 - CVE-2017-9798 httpd: various flaws
 
 * Wed Jul 26 2017 Luboš Uhliarik <luhliari@redhat.com> - 2.2.15-60.5
 - Resolves: #1463194 - CVE-2017-3167 httpd: ap_get_basic_auth_pw()
