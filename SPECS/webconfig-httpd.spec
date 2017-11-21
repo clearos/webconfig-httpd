@@ -16,7 +16,7 @@
 Summary: Webconfig HTTP Server
 Name: webconfig-httpd
 Version: 2.4.6
-Release: 67%{?dist}
+Release: 67%{?dist}.6
 URL: http://httpd.apache.org/
 Source0: http://www.apache.org/dist/httpd/httpd-%{version}.tar.bz2
 Source1: webconfig-index.html
@@ -151,6 +151,8 @@ Patch120: httpd-2.4.6-r1738878.patch
 Patch121: httpd-2.4.6-http-protocol-options-define.patch
 # https://bugzilla.redhat.com/show_bug.cgi?id=1332242
 Patch122: httpd-2.4.6-statements-comment.patch
+# https://bugzilla.redhat.com/show_bug.cgi?id=1467402
+Patch123: httpd-2.4.6-rotatelogs-zombie.patch
 
 # Security fixes
 Patch200: httpd-2.4.6-CVE-2013-6438.patch
@@ -168,6 +170,13 @@ Patch211: httpd-2.4.6-CVE-2016-5387.patch
 Patch212: httpd-2.4.6-CVE-2016-8743.patch
 Patch213: httpd-2.4.6-CVE-2016-0736.patch
 Patch214: httpd-2.4.6-CVE-2016-2161.patch
+Patch215: httpd-2.4.6-CVE-2017-3167.patch
+Patch216: httpd-2.4.6-CVE-2017-3169.patch
+Patch217: httpd-2.4.6-CVE-2017-7668.patch
+Patch218: httpd-2.4.6-CVE-2017-7679.patch
+Patch219: httpd-2.4.6-CVE-2017-9788.patch
+Patch220: httpd-2.4.6-CVE-2017-9798.patch
+
 License: ASL 2.0
 Group: System Environment/Daemons
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
@@ -365,6 +374,7 @@ rm modules/ssl/ssl_engine_dh.c
 %patch120 -p1 -b .r1738878
 %patch121 -p1 -b .httpprotdefine
 %patch122 -p1 -b .statement-comment
+%patch123 -p1 -b .logrotate-zombie
 
 %patch200 -p1 -b .cve6438
 %patch201 -p1 -b .cve0098
@@ -381,6 +391,12 @@ rm modules/ssl/ssl_engine_dh.c
 %patch212 -p1 -b .cve8743
 %patch213 -p1 -b .cve0736
 %patch214 -p1 -b .cve2161
+%patch215 -p1 -b .cve3167
+%patch216 -p1 -b .cve3169
+%patch217 -p1 -b .cve7668
+%patch218 -p1 -b .cve7679
+%patch219 -p1 -b .cve9788
+%patch220 -p1 -b .cve9798
 
 # Patch in the vendor string and the release string
 sed -i '/^#define PLATFORM/s/Unix/%{vstring}/' os/unix/os.h
@@ -795,14 +811,30 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/rpm/macros.webconfig-httpd
 
 %changelog
-* Sat Aug 12 2017 ClearFoundation <developer@clearfoundation.com> - 2.4.6-67.clear
+* Tue Nov 21 2017 ClearFoundation <developer@clearfoundation.com> - 2.4.6-67.clear.6
 - create sandboxed web server
 
-* Mon Jul 31 2017 CentOS Sources <bugs@centos.org> - 2.4.6-67.el7.centos
+* Thu Oct 19 2017 CentOS Sources <bugs@centos.org> - 2.4.6-67.el7.centos.6
 - Remove index.html, add centos-noindex.tar.gz
 - change vstring
 - change symlink for poweredby.png
 - update welcome.conf with proper aliases
+
+* Tue Oct 03 2017 Luboš Uhliarik <luhliari@redhat.com> - 2.4.6-67.6
+- Resolves: #1498020 - rotatelogs: creation of zombie processes when -p is used
+
+* Tue Sep 19 2017 Luboš Uhliarik <luhliari@redhat.com> - 2.4.6-67.5
+- Resolves: #1493064 - CVE-2017-9798 httpd: Use-after-free by limiting
+  unregistered HTTP method
+
+* Wed Jul 26 2017 Luboš Uhliarik <luhliari@redhat.com> - 2.4.6-67.2
+- Resolves: #1463194 - CVE-2017-3167 httpd: ap_get_basic_auth_pw()
+  authentication bypass
+- Resolves: #1463197 - CVE-2017-3169 httpd: mod_ssl NULL pointer dereference
+- Resolves: #1463207 - CVE-2017-7679 httpd: mod_mime buffer overread
+- Resolves: #1463205 - CVE-2017-7668 httpd: ap_find_token() buffer overread
+- Resolves: #1470748 - CVE-2017-9788 httpd: Uninitialized memory reflection
+  in mod_auth_digest
 
 * Tue May 09 2017 Luboš Uhliarik <luhliari@redhat.com> - 2.4.6-67
 - Related: #1332242 - Explicitly disallow the '#' character in allow,deny
